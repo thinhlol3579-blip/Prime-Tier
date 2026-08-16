@@ -61,6 +61,7 @@ export default function TierLadder() {
   const [renamePhotoValue, setRenamePhotoValue] = useState("");
   const [showPoints, setShowPoints] = useState(false);
   const [saveError, setSaveError] = useState(false);
+  const [selectedPlayerId, setSelectedPlayerId] = useState(null);
 
   useEffect(() => {
     const ref = doc(db, ...DOC_REF_PATH);
@@ -311,12 +312,17 @@ export default function TierLadder() {
         {activeTab === "overall" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {overallSorted.map((p, i) => (
-              <div key={p.id} className="tl-card">
+              <div
+                key={p.id}
+                className="tl-card"
+                onClick={() => renamingId !== p.id && setSelectedPlayerId(p.id)}
+                style={{ cursor: renamingId === p.id ? "default" : "pointer" }}
+              >
                 <div className="tl-mono" style={{ width: 24, textAlign: "right", color: "#8D8998", fontSize: 13 }}>{i + 1}</div>
                 <Avatar name={p.name} photoUrl={p.photoUrl} size={34} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   {renamingId === p.id ? (
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }} onClick={(e) => e.stopPropagation()}>
                       <input className="tl-input" autoFocus placeholder="Tên" value={renameValue} onChange={(e) => setRenameValue(e.target.value)} style={{ padding: "4px 8px", fontSize: 13, width: 140 }} />
                       <input className="tl-input" placeholder="Link ảnh (tuỳ chọn)" value={renamePhotoValue} onChange={(e) => setRenamePhotoValue(e.target.value)} style={{ padding: "4px 8px", fontSize: 13, width: 180 }} />
                       <Check size={16} onClick={() => saveEdit(p.id)} style={{ cursor: "pointer", color: "#5FAFC4", alignSelf: "center" }} />
@@ -330,7 +336,13 @@ export default function TierLadder() {
                       const meta = tierMeta(p.ranks[g.id], tierPoints);
                       const c = GROUP_COLOR[meta.group];
                       return (
-                        <span key={g.id} title={g.name} className="tl-mono" style={{ fontSize: 10, padding: "1px 5px", borderRadius: 4, background: c.bg, color: c.text }}>
+                        <span
+                          key={g.id}
+                          title={`${g.name}: ${meta.code === "UR" ? "Chưa xếp" : meta.code}`}
+                          className="tl-mono"
+                          style={{ fontSize: 11, padding: "1px 6px", borderRadius: 4, background: c.bg, color: c.text, display: "inline-flex", alignItems: "center", gap: 3, opacity: meta.code === "UR" ? 0.4 : 1 }}
+                        >
+                          <span style={{ fontSize: 11 }}>{g.icon || "⚔️"}</span>
                           {meta.code === "UR" ? "—" : meta.code}
                         </span>
                       );
@@ -339,7 +351,7 @@ export default function TierLadder() {
                 </div>
                 <div className="tl-mono" style={{ fontSize: 16, fontWeight: 600, minWidth: 40, textAlign: "right" }}>{totals[p.id]}</div>
                 {editMode && (
-                  <div style={{ display: "flex", gap: 6, marginLeft: 6 }}>
+                  <div style={{ display: "flex", gap: 6, marginLeft: 6 }} onClick={(e) => e.stopPropagation()}>
                     <Pencil size={14} style={{ cursor: "pointer", color: "#8D8998" }} onClick={() => { setRenamingId(p.id); setRenameValue(p.name); setRenamePhotoValue(p.photoUrl || ""); }} />
                     <Trash2 size={14} style={{ cursor: "pointer", color: "#8D8998" }} onClick={() => removePlayer(p.id)} />
                   </div>
@@ -404,6 +416,52 @@ export default function TierLadder() {
           </div>
         )}
       </div>
+
+      {selectedPlayerId && (() => {
+        const player = players.find((pl) => pl.id === selectedPlayerId);
+        if (!player) return null;
+        return (
+          <div
+            onClick={() => setSelectedPlayerId(null)}
+            style={{ position: "fixed", inset: 0, background: "rgba(5,5,8,0.72)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 50 }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{ background: "#131119", border: "1px solid #221F2B", borderRadius: 16, width: "100%", maxWidth: 420, maxHeight: "85vh", overflowY: "auto" }}
+            >
+              <div style={{ padding: "22px 22px 16px", borderBottom: "1px solid #1E1C27", display: "flex", alignItems: "center", gap: 14 }}>
+                <Avatar name={player.name} photoUrl={player.photoUrl} size={54} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="tl-display" style={{ fontSize: 18, fontWeight: 700 }}>{player.name}</div>
+                  <div className="tl-mono" style={{ fontSize: 12, color: "#8D8998", marginTop: 2 }}>
+                    Tổng điểm: <span style={{ color: "#F1EFF7", fontWeight: 600 }}>{totals[player.id]}</span>
+                  </div>
+                </div>
+                <X size={18} onClick={() => setSelectedPlayerId(null)} style={{ cursor: "pointer", color: "#8D8998", flexShrink: 0 }} />
+              </div>
+              <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 6 }}>
+                {gamemodes.map((g) => {
+                  const meta = tierMeta(player.ranks[g.id], tierPoints);
+                  const c = GROUP_COLOR[meta.group];
+                  return (
+                    <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 10, background: "#17151F", border: "1px solid #221F2B", borderRadius: 10, padding: "10px 12px", borderLeft: `3px solid ${c.edge}` }}>
+                      <span style={{ fontSize: 18, width: 22, textAlign: "center" }}>{g.icon || "⚔️"}</span>
+                      <span style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>{g.name}</span>
+                      <span className="tl-mono" style={{ fontSize: 12, padding: "2px 8px", borderRadius: 5, background: c.bg, color: c.text, fontWeight: 600 }}>
+                        {meta.code === "UR" ? "Chưa xếp" : meta.code}
+                      </span>
+                      <span className="tl-mono" style={{ fontSize: 11, color: "#8D8998", minWidth: 32, textAlign: "right" }}>{meta.points}pt</span>
+                    </div>
+                  );
+                })}
+                {gamemodes.length === 0 && (
+                  <div style={{ fontSize: 12, color: "#57546A", textAlign: "center", padding: "16px 0" }}>Chưa có chế độ chơi nào.</div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
