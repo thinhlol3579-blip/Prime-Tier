@@ -34,6 +34,7 @@ const MEDAL = {
 };
 
 const DOC_REF_PATH = ["tierLadder", "data"];
+const ADMIN_PASSWORD = "992010"; // đổi mật khẩu này tuỳ ý
 const uid = () => Math.random().toString(36).slice(2, 10);
 
 function tierMeta(code, points) {
@@ -238,7 +239,19 @@ export default function TierLadder() {
             )}
             <button
               className="tl-btn"
-              onClick={() => setEditMode((e) => !e)}
+              onClick={() => {
+                if (editMode) {
+                  setEditMode(false);
+                  return;
+                }
+                const input = window.prompt("Nhập mật khẩu Admin:");
+                if (input === null) return;
+                if (input === ADMIN_PASSWORD) {
+                  setEditMode(true);
+                } else {
+                  alert("Sai mật khẩu.");
+                }
+              }}
               style={editMode ? { background: "#5FAFC4", color: "#0D0C12", borderColor: "#5FAFC4" } : {}}
             >
               <Settings size={14} /> {editMode ? "Đang chỉnh sửa" : "Chế độ Admin"}
@@ -316,7 +329,48 @@ export default function TierLadder() {
         )}
 
         {activeTab === "overall" ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 26 }}>
+            {overallSorted.length > 0 && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, alignItems: "end", padding: "6px 2px 0" }}>
+                {[1, 0, 2].map((idx) => {
+                  const p = overallSorted[idx];
+                  const medal = MEDAL[idx];
+                  if (!p) return <div key={idx} />;
+                  const isFirst = idx === 0;
+                  return (
+                    <div
+                      key={p.id}
+                      onClick={() => setSelectedPlayerId(p.id)}
+                      className="tl-display"
+                      style={{
+                        cursor: "pointer",
+                        background: "#17151F",
+                        border: `1px solid ${medal.edge}`,
+                        boxShadow: `0 0 26px ${medal.glow}`,
+                        borderRadius: 14,
+                        padding: isFirst ? "18px 10px 14px" : "14px 8px 12px",
+                        marginTop: isFirst ? 0 : 22,
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: 8,
+                      }}
+                    >
+                      <div style={{ fontSize: isFirst ? 14 : 12, fontWeight: 700, color: medal.chip, textAlign: "center", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {p.name}
+                      </div>
+                      <Avatar name={p.name} photoUrl={p.photoUrl} size={isFirst ? 64 : 50} />
+                      <div className="tl-mono" style={{ fontSize: 11, color: "#8D8998" }}>{totals[p.id]} điểm</div>
+                      <div style={{ fontSize: isFirst ? 26 : 20, fontWeight: 700, color: medal.chip, textShadow: `0 0 14px ${medal.glow}` }}>
+                        {idx + 1}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {overallSorted.map((p, i) => {
               const medal = MEDAL[i];
               return (
@@ -375,9 +429,10 @@ export default function TierLadder() {
               </div>
               );
             })}
+            </div>
 
             {editMode && (
-              <div style={{ marginTop: 10 }}>
+              <div>
                 {addingPlayer ? (
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                     {newPlayerPhoto && <Avatar name={newPlayerName || "?"} photoUrl={newPlayerPhoto} size={30} />}
@@ -392,7 +447,7 @@ export default function TierLadder() {
               </div>
             )}
 
-            {saveError && <div style={{ fontSize: 12, color: "#E8432B", marginTop: 8 }}>Lưu dữ liệu thất bại — thử lại thao tác vừa rồi.</div>}
+            {saveError && <div style={{ fontSize: 12, color: "#E8432B" }}>Lưu dữ liệu thất bại — thử lại thao tác vừa rồi.</div>}
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
