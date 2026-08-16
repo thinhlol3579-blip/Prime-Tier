@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Flame, Plus, X, Trash2, Settings, Trophy, Pencil, Check, Sliders, Search } from "lucide-react";
+import { Flame, Plus, X, Trash2, Settings, Trophy, Pencil, Check, Sliders, Search, Ban } from "lucide-react";
 import { db } from "./firebase";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 
@@ -147,6 +147,19 @@ export default function TierLadder() {
     });
   }
 
+  function toggleRetired(playerId, modeId) {
+    persist({
+      ...data,
+      players: players.map((p) => {
+        if (p.id !== playerId) return p;
+        const retired = { ...(p.retired || {}) };
+        if (retired[modeId]) delete retired[modeId];
+        else retired[modeId] = true;
+        return { ...p, retired };
+      }),
+    });
+  }
+
   function addMode() {
     const name = newModeName.trim();
     if (!name) return;
@@ -208,11 +221,12 @@ export default function TierLadder() {
 
   const groupedForMode = useMemo(() => {
     if (!activeMode) return [];
-    const groups = { 1: [], 2: [], 3: [], 4: [], 5: [], UR: [] };
+    const groups = { 1: [], 2: [], 3: [], 4: [], 5: [], UR: [], RET: [] };
     for (const p of players) {
       if (query && !p.name.toLowerCase().includes(query)) continue;
       const meta = tierMeta(p.ranks[activeMode.id], tierPoints);
-      groups[meta.group].push({ player: p, meta });
+      const isRetired = !!p.retired?.[activeMode.id];
+      groups[isRetired ? "RET" : meta.group].push({ player: p, meta, isRetired });
     }
     for (const k of Object.keys(groups)) groups[k].sort((a, b) => a.player.name.localeCompare(b.player.name));
     return groups;
@@ -442,13 +456,14 @@ export default function TierLadder() {
                   <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
                     {gamemodes.map((g) => {
                       const meta = tierMeta(p.ranks[g.id], tierPoints);
+                      const isRetired = !!p.retired?.[g.id];
                       const c = GROUP_COLOR[meta.group];
                       return (
                         <span
                           key={g.id}
-                          title={`${g.name}: ${meta.code === "UR" ? "Chưa xếp" : meta.code}`}
+                          title={isRetired ? `${g.name}: Đã nghỉ hưu` : `${g.name}: ${meta.code === "UR" ? "Chưa xếp" : meta.code}`}
                           className="tl-mono"
-                          style={{ fontSize: 11, padding: "1px 6px", borderRadius: 4, background: c.bg, color: c.text, display: "inline-flex", alignItems: "center", gap: 3, opacity: meta.code === "UR" ? 0.4 : 1 }}
+                          style={{ fontSize: 11, padding: "1px 6px", borderRadius: 4, background: c.bg, color: c.text, display: "inline-flex", alignItems: "center", gap: 3, opacity: isRetired ? 0.35 : meta.code === "UR" ? 0.4 : 1 }}
                         >
                           <span style={{ fontSize: 11 }}>{g.icon || "⚔️"}</span>
                           {meta.code === "UR" ? "—" : meta.code}
@@ -489,31 +504,43 @@ export default function TierLadder() {
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
-            {[1, 2, 3, 4, 5, "UR"].map((groupKey) => {
+            {[1, 2, 3, 4, 5, "UR", "RET"].map((groupKey) => {
               const entries = groupedForMode[groupKey] || [];
               if (!editMode && entries.length === 0) return null;
               if (groupKey === "UR" && !editMode) return null;
-              const c = GROUP_COLOR[groupKey];
-              const label = groupKey === "UR" ? "CHƯA XẾP HẠNG" : `TIER ${groupKey}`;
+              if (groupKey === "RET" && entries.length === 0) return null;
+              const isRet = groupKey === "RET";
+              const c = isRet ? { edge: "#57546A", text: "#8D8998" } : GROUP_COLOR[groupKey];
+              const label = isRet ? "ĐÃ NGHỈ HƯU" : groupKey === "UR" ? "CHƯA XẾP HẠNG" : `TIER ${groupKey}`;
               return (
                 <div key={groupKey}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
                     <div className="tl-display" style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.08em", color: c.text, minWidth: 100 }}>{label}</div>
-                    <div style={{ flex: 1, height: 3, borderRadius: 2, background: c.edge, opacity: groupKey === "UR" ? 0.3 : 0.9 - (groupKey - 1) * 0.05 }} />
+                    <div style={{ flex: 1, height: 3, borderRadius: 2, background: c.edge, opacity: groupKey === "UR" || isRet ? 0.3 : 0.9 - (groupKey - 1) * 0.05 }} />
                   </div>
                   {entries.length === 0 ? (
                     <div style={{ fontSize: 12, color: "#57546A", paddingLeft: 2 }}>Chưa có ai</div>
                   ) : (
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 8 }}>
-                      {entries.map(({ player, meta }) => (
-                        <div key={player.id} className="tl-card" style={{ borderLeft: `3px solid ${c.edge}` }}>
+                      {entries.map(({ player, meta, isRetired }) => (
+                        <div key={player.id} className="tl-card" style={{ borderLeft: `3px solid ${c.edge}`, opacity: isRetired ? 0.6 : 1 }}>
                           <Avatar name={player.name} photoUrl={player.photoUrl} size={28} />
                           <div style={{ flex: 1, fontSize: 13, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{player.name}</div>
                           {editMode ? (
-                            <select className="tl-select" value={meta.code} onChange={(e) => setRank(player.id, activeMode.id, e.target.value)}>
-                              <option value="UR">—</option>
-                              {TIER_CODES.map((code) => <option key={code} value={code}>{code}</option>)}
-                            </select>
+                            <>
+                              <select className="tl-select" value={meta.code} onChange={(e) => setRank(player.id, activeMode.id, e.target.value)}>
+                                <option value="UR">—</option>
+                                {TIER_CODES.map((code) => <option key={code} value={code}>{code}</option>)}
+                              </select>
+                              <Ban
+                                size={14}
+                                title={isRetired ? "Bỏ nghỉ hưu" : "Đánh dấu nghỉ hưu"}
+                                onClick={() => toggleRetired(player.id, activeMode.id)}
+                                style={{ cursor: "pointer", color: isRetired ? "#E8432B" : "#8D8998", flexShrink: 0 }}
+                              />
+                            </>
+                          ) : isRetired ? (
+                            <span className="tl-mono" style={{ fontSize: 10, color: "#8D8998" }}>Nghỉ hưu</span>
                           ) : (
                             <span className="tl-mono" style={{ fontSize: 11, color: c.text }}>{meta.points}pt</span>
                           )}
@@ -553,11 +580,15 @@ export default function TierLadder() {
               <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 6 }}>
                 {gamemodes.map((g) => {
                   const meta = tierMeta(player.ranks[g.id], tierPoints);
+                  const isRetired = !!player.retired?.[g.id];
                   const c = GROUP_COLOR[meta.group];
                   return (
-                    <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 10, background: "#17151F", border: "1px solid #221F2B", borderRadius: 10, padding: "10px 12px", borderLeft: `3px solid ${c.edge}` }}>
+                    <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 10, background: "#17151F", border: "1px solid #221F2B", borderRadius: 10, padding: "10px 12px", borderLeft: `3px solid ${c.edge}`, opacity: isRetired ? 0.6 : 1 }}>
                       <span style={{ fontSize: 18, width: 22, textAlign: "center" }}>{g.icon || "⚔️"}</span>
                       <span style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>{g.name}</span>
+                      {isRetired && (
+                        <span className="tl-mono" style={{ fontSize: 10, padding: "2px 6px", borderRadius: 5, background: "rgba(87,84,106,0.2)", color: "#8D8998" }}>NGHỈ HƯU</span>
+                      )}
                       <span className="tl-mono" style={{ fontSize: 12, padding: "2px 8px", borderRadius: 5, background: c.bg, color: c.text, fontWeight: 600 }}>
                         {meta.code === "UR" ? "Chưa xếp" : meta.code}
                       </span>
