@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Flame, Plus, X, Trash2, Settings, Trophy, Pencil, Check, Sliders } from "lucide-react";
+import { Flame, Plus, X, Trash2, Settings, Trophy, Pencil, Check, Sliders, Search } from "lucide-react";
 import { db } from "./firebase";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 
@@ -69,6 +69,7 @@ export default function TierLadder() {
   const [showPoints, setShowPoints] = useState(false);
   const [saveError, setSaveError] = useState(false);
   const [selectedPlayerId, setSelectedPlayerId] = useState(null);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     const ref = doc(db, ...DOC_REF_PATH);
@@ -191,18 +192,31 @@ export default function TierLadder() {
     [players, totals]
   );
 
+  const rankMap = useMemo(() => {
+    const m = {};
+    overallSorted.forEach((p, i) => (m[p.id] = i));
+    return m;
+  }, [overallSorted]);
+
+  const query = search.trim().toLowerCase();
+  const filteredOverall = useMemo(
+    () => (query ? overallSorted.filter((p) => p.name.toLowerCase().includes(query)) : overallSorted),
+    [overallSorted, query]
+  );
+
   const activeMode = gamemodes.find((g) => g.id === activeTab);
 
   const groupedForMode = useMemo(() => {
     if (!activeMode) return [];
     const groups = { 1: [], 2: [], 3: [], 4: [], 5: [], UR: [] };
     for (const p of players) {
+      if (query && !p.name.toLowerCase().includes(query)) continue;
       const meta = tierMeta(p.ranks[activeMode.id], tierPoints);
       groups[meta.group].push({ player: p, meta });
     }
     for (const k of Object.keys(groups)) groups[k].sort((a, b) => a.player.name.localeCompare(b.player.name));
     return groups;
-  }, [players, activeMode, tierPoints]);
+  }, [players, activeMode, tierPoints, query]);
 
   if (loading) {
     return (
@@ -335,9 +349,22 @@ export default function TierLadder() {
           </div>
         )}
 
+        {players.length > 0 && (
+          <div style={{ position: "relative", marginBottom: 18 }}>
+            <Search size={14} color="#8D8998" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
+            <input
+              className="tl-input"
+              placeholder="Tìm thành viên theo tên..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{ width: "100%", paddingLeft: 34 }}
+            />
+          </div>
+        )}
+
         {activeTab === "overall" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 26 }}>
-            {overallSorted.length > 0 && (
+            {overallSorted.length > 0 && !query && (
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, alignItems: "end", padding: "6px 2px 0" }}>
                 {[1, 0, 2].map((idx) => {
                   const p = overallSorted[idx];
@@ -378,7 +405,11 @@ export default function TierLadder() {
             )}
 
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {overallSorted.map((p, i) => {
+            {query && filteredOverall.length === 0 && (
+              <div style={{ textAlign: "center", color: "#8D8998", padding: "24px 0", fontSize: 13 }}>Không tìm thấy thành viên nào.</div>
+            )}
+            {filteredOverall.map((p) => {
+              const i = rankMap[p.id];
               const medal = MEDAL[i];
               return (
               <div
