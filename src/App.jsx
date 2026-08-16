@@ -133,9 +133,16 @@ export default function TierLadder() {
   function setRank(playerId, modeId, code) {
     persist({
       ...data,
-      players: players.map((p) =>
-        p.id === playerId ? { ...p, ranks: { ...p.ranks, [modeId]: code === "UR" ? undefined : code } } : p
-      ),
+      players: players.map((p) => {
+        if (p.id !== playerId) return p;
+        const ranks = { ...p.ranks };
+        if (code === "UR") {
+          delete ranks[modeId];
+        } else {
+          ranks[modeId] = code;
+        }
+        return { ...p, ranks };
+      }),
     });
   }
 
