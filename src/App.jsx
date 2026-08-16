@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Flame, Plus, X, Trash2, Settings, Trophy, Pencil, Check, Sliders, Search, Ban } from "lucide-react";
+import { Flame, Plus, X, Trash2, Settings, Trophy, Pencil, Check, Sliders, Search, Ban, Download } from "lucide-react";
 import { db } from "./firebase";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 
@@ -44,6 +44,26 @@ function tierMeta(code, points) {
 
 function initials(name) {
   return name.trim().split(/\s+/).slice(-2).map((w) => w[0]?.toUpperCase()).join("");
+}
+
+function loadImageEl(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
 }
 
 function Avatar({ name, photoUrl, size }) {
@@ -190,6 +210,116 @@ export default function TierLadder() {
     persist({ ...data, tierPoints: { ...tierPoints, [code]: n } });
   }
 
+  async function exportCard(player) {
+    const width = 640;
+    const rowH = 54;
+    const headerH = 450;
+    const footerH = 70;
+    const height = headerH + gamemodes.length * rowH + footerH;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+
+    const grad = ctx.createLinearGradient(0, 0, 0, height);
+    grad.addColorStop(0, "#181521");
+    grad.addColorStop(1, "#0A090E");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, width, height);
+    ctx.strokeStyle = "rgba(255,255,255,0.08)";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(8, 8, width - 16, height - 16);
+
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#E8432B";
+    ctx.font = "bold 20px sans-serif";
+    ctx.fillText("🔥 PRIME TIER", width / 2, 55);
+
+    const avatarSize = 170;
+    const avatarX = width / 2;
+    const avatarY = 190;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(avatarX, avatarY, avatarSize / 2, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.clip();
+    let drawn = false;
+    if (player.photoUrl) {
+      try {
+        const img = await loadImageEl(player.photoUrl);
+        ctx.drawImage(img, avatarX - avatarSize / 2, avatarY - avatarSize / 2, avatarSize, avatarSize);
+        drawn = true;
+      } catch {
+        drawn = false;
+      }
+    }
+    if (!drawn) {
+      ctx.fillStyle = "#221F2B";
+      ctx.fillRect(avatarX - avatarSize / 2, avatarY - avatarSize / 2, avatarSize, avatarSize);
+      ctx.fillStyle = "#F1EFF7";
+      ctx.font = "bold 62px sans-serif";
+      ctx.textBaseline = "middle";
+      ctx.fillText(initials(player.name), avatarX, avatarY + 4);
+      ctx.textBaseline = "alphabetic";
+    }
+    ctx.restore();
+    ctx.beginPath();
+    ctx.arc(avatarX, avatarY, avatarSize / 2, 0, Math.PI * 2);
+    ctx.strokeStyle = "#5FAFC4";
+    ctx.lineWidth = 4;
+    ctx.stroke();
+
+    ctx.fillStyle = "#F1EFF7";
+    ctx.font = "bold 32px sans-serif";
+    ctx.fillText(player.name, width / 2, avatarY + avatarSize / 2 + 48);
+
+    ctx.fillStyle = "#8D8998";
+    ctx.font = "14px monospace";
+    ctx.fillText("TỔNG ĐIỂM", width / 2, avatarY + avatarSize / 2 + 78);
+    ctx.fillStyle = "#FFD54A";
+    ctx.font = "bold 44px monospace";
+    ctx.fillText(String(totals[player.id] ?? 0), width / 2, avatarY + avatarSize / 2 + 128);
+
+    let y = headerH - 20;
+    ctx.textAlign = "left";
+    for (const g of gamemodes) {
+      const meta = tierMeta(player.ranks[g.id], tierPoints);
+      const isRetired = !!player.retired?.[g.id];
+      const c = GROUP_COLOR[meta.group];
+      ctx.fillStyle = "rgba(255,255,255,0.04)";
+      roundRect(ctx, 40, y, width - 80, rowH - 12, 10);
+      ctx.fill();
+      const midY = y + (rowH - 12) / 2;
+      ctx.font = "20px sans-serif";
+      ctx.fillStyle = "#fff";
+      ctx.textBaseline = "middle";
+      ctx.fillText(g.icon || "⚔️", 58, midY);
+      ctx.font = "15px sans-serif";
+      ctx.fillStyle = "#F1EFF7";
+      ctx.fillText(g.name, 92, midY);
+      const chipText = isRetired ? "NGHỈ HƯU" : meta.code === "UR" ? "CHƯA XẾP" : meta.code;
+      ctx.font = "bold 13px monospace";
+      ctx.fillStyle = isRetired ? "#57546A" : c.text;
+      ctx.textAlign = "right";
+      ctx.fillText(chipText, width - 58, midY);
+      ctx.textAlign = "left";
+      ctx.textBaseline = "alphabetic";
+      y += rowH;
+    }
+
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#57546A";
+    ctx.font = "12px sans-serif";
+    ctx.fillText("prime-tier.vercel.app", width / 2, height - 24);
+
+    const url = canvas.toDataURL("image/png");
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${player.name.replace(/\s+/g, "_")}-tier-card.png`;
+    a.click();
+  }
+
   const totals = useMemo(() => {
     const map = {};
     for (const p of players) {
@@ -262,7 +392,7 @@ export default function TierLadder() {
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <Flame size={22} color="#E8432B" />
             <div>
-              <div className="tl-display" style={{ fontSize: 20, fontWeight: 700, letterSpacing: "0.02em" }}>TIER LADDER</div>
+              <div className="tl-display" style={{ fontSize: 20, fontWeight: 700, letterSpacing: "0.02em" }}>PRIME TIER</div>
               <div style={{ fontSize: 12, color: "#8D8998" }}>Bảng xếp hạng combat của team</div>
             </div>
           </div>
@@ -404,7 +534,7 @@ export default function TierLadder() {
                         gap: 8,
                       }}
                     >
-                      <div style={{ fontSize: isFirst ? 14 : 12, fontWeight: 700, color: medal.chip, textAlign: "center", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <div style={{ fontSize: isFirst ? 14 : 12, fontWeight: 700, color: medal.chip, textShadow: `0 0 10px ${medal.glow}`, textAlign: "center", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {p.name}
                       </div>
                       <Avatar name={p.name} photoUrl={p.photoUrl} size={isFirst ? 64 : 50} />
@@ -451,7 +581,7 @@ export default function TierLadder() {
                       <X size={16} onClick={() => setRenamingId(null)} style={{ cursor: "pointer", color: "#8D8998", alignSelf: "center" }} />
                     </div>
                   ) : (
-                    <div style={{ fontSize: 14, fontWeight: 500 }}>{p.name}</div>
+                    <div style={{ fontSize: 14, fontWeight: medal ? 700 : 500, color: medal ? medal.chip : "#F1EFF7", textShadow: medal ? `0 0 10px ${medal.glow}` : "none" }}>{p.name}</div>
                   )}
                   <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
                     {gamemodes.map((g) => {
@@ -576,6 +706,11 @@ export default function TierLadder() {
                   </div>
                 </div>
                 <X size={18} onClick={() => setSelectedPlayerId(null)} style={{ cursor: "pointer", color: "#8D8998", flexShrink: 0 }} />
+              </div>
+              <div style={{ padding: "12px 22px 0" }}>
+                <button className="tl-btn" style={{ width: "100%", justifyContent: "center" }} onClick={() => exportCard(player)}>
+                  <Download size={14} /> Tải ảnh thẻ bài
+                </button>
               </div>
               <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 6 }}>
                 {gamemodes.map((g) => {
