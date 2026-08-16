@@ -27,6 +27,12 @@ const DEFAULT_MODES = [
   { id: "smp", name: "SMP", icon: "🛡️" },
 ];
 
+const MEDAL = {
+  0: { edge: "#FFD54A", glow: "rgba(255,213,74,0.45)", chip: "#FFD54A" },
+  1: { edge: "#D6DCE5", glow: "rgba(214,220,229,0.35)", chip: "#D6DCE5" },
+  2: { edge: "#E29659", glow: "rgba(226,150,89,0.35)", chip: "#E29659" },
+};
+
 const DOC_REF_PATH = ["tierLadder", "data"];
 const uid = () => Math.random().toString(36).slice(2, 10);
 
@@ -311,20 +317,30 @@ export default function TierLadder() {
 
         {activeTab === "overall" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {overallSorted.map((p, i) => (
+            {overallSorted.map((p, i) => {
+              const medal = MEDAL[i];
+              return (
               <div
                 key={p.id}
                 className="tl-card"
                 onClick={() => renamingId !== p.id && setSelectedPlayerId(p.id)}
-                style={{ cursor: renamingId === p.id ? "default" : "pointer" }}
+                style={{
+                  cursor: renamingId === p.id ? "default" : "pointer",
+                  ...(medal
+                    ? { border: `1px solid ${medal.edge}`, boxShadow: `0 0 18px ${medal.glow}`, background: "#1A1720" }
+                    : {}),
+                }}
               >
-                <div className="tl-mono" style={{ width: 24, textAlign: "right", color: "#8D8998", fontSize: 13 }}>{i + 1}</div>
+                <div className="tl-mono" style={{ width: 24, textAlign: "right", fontSize: medal ? 17 : 13, color: medal ? medal.chip : "#8D8998" }}>
+                  {medal ? ["🥇", "🥈", "🥉"][i] : i + 1}
+                </div>
                 <Avatar name={p.name} photoUrl={p.photoUrl} size={34} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   {renamingId === p.id ? (
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }} onClick={(e) => e.stopPropagation()}>
-                      <input className="tl-input" autoFocus placeholder="Tên" value={renameValue} onChange={(e) => setRenameValue(e.target.value)} style={{ padding: "4px 8px", fontSize: 13, width: 140 }} />
-                      <input className="tl-input" placeholder="Link ảnh (tuỳ chọn)" value={renamePhotoValue} onChange={(e) => setRenamePhotoValue(e.target.value)} style={{ padding: "4px 8px", fontSize: 13, width: 180 }} />
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }} onClick={(e) => e.stopPropagation()}>
+                      {renamePhotoValue && <Avatar name={renameValue || "?"} photoUrl={renamePhotoValue} size={26} />}
+                      <input className="tl-input" autoFocus placeholder="Tên" value={renameValue} onChange={(e) => setRenameValue(e.target.value)} style={{ padding: "4px 8px", fontSize: 13, width: 120 }} />
+                      <input className="tl-input" placeholder="Dán link ảnh (không bắt buộc)" value={renamePhotoValue} onChange={(e) => setRenamePhotoValue(e.target.value)} style={{ padding: "4px 8px", fontSize: 13, width: 190 }} />
                       <Check size={16} onClick={() => saveEdit(p.id)} style={{ cursor: "pointer", color: "#5FAFC4", alignSelf: "center" }} />
                       <X size={16} onClick={() => setRenamingId(null)} style={{ cursor: "pointer", color: "#8D8998", alignSelf: "center" }} />
                     </div>
@@ -349,7 +365,7 @@ export default function TierLadder() {
                     })}
                   </div>
                 </div>
-                <div className="tl-mono" style={{ fontSize: 16, fontWeight: 600, minWidth: 40, textAlign: "right" }}>{totals[p.id]}</div>
+                <div className="tl-mono" style={{ fontSize: 16, fontWeight: 600, minWidth: 40, textAlign: "right", color: medal ? medal.chip : "#F1EFF7" }}>{totals[p.id]}</div>
                 {editMode && (
                   <div style={{ display: "flex", gap: 6, marginLeft: 6 }} onClick={(e) => e.stopPropagation()}>
                     <Pencil size={14} style={{ cursor: "pointer", color: "#8D8998" }} onClick={() => { setRenamingId(p.id); setRenameValue(p.name); setRenamePhotoValue(p.photoUrl || ""); }} />
@@ -357,14 +373,16 @@ export default function TierLadder() {
                   </div>
                 )}
               </div>
-            ))}
+              );
+            })}
 
             {editMode && (
               <div style={{ marginTop: 10 }}>
                 {addingPlayer ? (
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                    {newPlayerPhoto && <Avatar name={newPlayerName || "?"} photoUrl={newPlayerPhoto} size={30} />}
                     <input className="tl-input" autoFocus placeholder="Tên thành viên" value={newPlayerName} onChange={(e) => setNewPlayerName(e.target.value)} style={{ flex: "1 1 160px" }} />
-                    <input className="tl-input" placeholder="Link ảnh (tuỳ chọn)" value={newPlayerPhoto} onChange={(e) => setNewPlayerPhoto(e.target.value)} style={{ flex: "1 1 200px" }} onKeyDown={(e) => e.key === "Enter" && addPlayer()} />
+                    <input className="tl-input" placeholder="Dán link ảnh (không bắt buộc)" value={newPlayerPhoto} onChange={(e) => setNewPlayerPhoto(e.target.value)} style={{ flex: "1 1 200px" }} onKeyDown={(e) => e.key === "Enter" && addPlayer()} />
                     <button className="tl-btn" onClick={addPlayer}><Check size={14} /> Thêm</button>
                     <button className="tl-btn" onClick={() => setAddingPlayer(false)}><X size={14} /></button>
                   </div>
