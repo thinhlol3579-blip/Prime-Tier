@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Flame, Plus, X, Trash2, Settings, Trophy, Pencil, Check, Sliders, Search, Ban, Download } from "lucide-react";
+import { Flame, Plus, X, Trash2, Settings, Trophy, Pencil, Check, Sliders, Search, Ban, Download, Swords } from "lucide-react";
 import { db } from "./firebase";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 
@@ -90,6 +90,10 @@ export default function TierLadder() {
   const [saveError, setSaveError] = useState(false);
   const [selectedPlayerId, setSelectedPlayerId] = useState(null);
   const [search, setSearch] = useState("");
+  const [addingTournament, setAddingTournament] = useState(false);
+  const [newTournamentName, setNewTournamentName] = useState("");
+  const [addingMatchFor, setAddingMatchFor] = useState(null);
+  const [matchDraft, setMatchDraft] = useState({ playerAId: "", playerBId: "", modeId: "", scoreA: 0, scoreB: 0 });
 
   useEffect(() => {
     const ref = doc(db, ...DOC_REF_PATH);
@@ -98,14 +102,14 @@ export default function TierLadder() {
       (snap) => {
         if (snap.exists()) {
           const parsed = snap.data();
-          setData({ gamemodes: DEFAULT_MODES, players: [], tierPoints: { ...DEFAULT_POINTS }, ...parsed });
+          setData({ gamemodes: DEFAULT_MODES, players: [], tierPoints: { ...DEFAULT_POINTS }, tournaments: [], ...parsed });
         } else {
-          setData({ gamemodes: DEFAULT_MODES, players: [], tierPoints: { ...DEFAULT_POINTS } });
+          setData({ gamemodes: DEFAULT_MODES, players: [], tierPoints: { ...DEFAULT_POINTS }, tournaments: [] });
         }
         setLoading(false);
       },
       () => {
-        setData({ gamemodes: DEFAULT_MODES, players: [], tierPoints: { ...DEFAULT_POINTS } });
+        setData({ gamemodes: DEFAULT_MODES, players: [], tierPoints: { ...DEFAULT_POINTS }, tournaments: [] });
         setLoading(false);
       }
     );
@@ -126,6 +130,7 @@ export default function TierLadder() {
   const players = data?.players ?? [];
   const gamemodes = data?.gamemodes ?? [];
   const tierPoints = data?.tierPoints ?? DEFAULT_POINTS;
+  const tournaments = data?.tournaments ?? [];
 
   function addPlayer() {
     const name = newPlayerName.trim();
@@ -208,6 +213,52 @@ export default function TierLadder() {
   function setTierPoint(code, value) {
     const n = Math.max(0, Math.min(999, Number(value) || 0));
     persist({ ...data, tierPoints: { ...tierPoints, [code]: n } });
+  }
+
+  function addTournament() {
+    const name = newTournamentName.trim();
+    if (!name) return;
+    const t = { id: uid(), name, matches: [] };
+    persist({ ...data, tournaments: [t, ...tournaments] });
+    setNewTournamentName("");
+    setAddingTournament(false);
+  }
+
+  function deleteTournament(id) {
+    if (!confirm("Xoá giải đấu này? Toàn bộ trận đấu trong đó sẽ mất.")) return;
+    persist({ ...data, tournaments: tournaments.filter((t) => t.id !== id) });
+  }
+
+  function addMatch(tournamentId) {
+    const { playerAId, playerBId, modeId, scoreA, scoreB } = matchDraft;
+    if (!playerAId || !playerBId || playerAId === playerBId) {
+      alert("Chọn 2 người chơi khác nhau.");
+      return;
+    }
+    const match = { id: uid(), playerAId, playerBId, modeId: modeId || null, scoreA: Number(scoreA) || 0, scoreB: Number(scoreB) || 0 };
+    persist({
+      ...data,
+      tournaments: tournaments.map((t) => (t.id === tournamentId ? { ...t, matches: [...t.matches, match] } : t)),
+    });
+    setMatchDraft({ playerAId: "", playerBId: "", modeId: "", scoreA: 0, scoreB: 0 });
+    setAddingMatchFor(null);
+  }
+
+  function deleteMatch(tournamentId, matchId) {
+    persist({
+      ...data,
+      tournaments: tournaments.map((t) => (t.id === tournamentId ? { ...t, matches: t.matches.filter((m) => m.id !== matchId) } : t)),
+    });
+  }
+
+  function updateMatchScore(tournamentId, matchId, field, value) {
+    const n = Math.max(0, Number(value) || 0);
+    persist({
+      ...data,
+      tournaments: tournaments.map((t) =>
+        t.id !== tournamentId ? t : { ...t, matches: t.matches.map((m) => (m.id === matchId ? { ...m, [field]: n } : m)) }
+      ),
+    });
   }
 
   async function exportCard(player) {
@@ -448,6 +499,13 @@ export default function TierLadder() {
           >
             <Trophy size={13} /> TỔNG
           </div>
+          <div
+            className="tl-tab"
+            onClick={() => setActiveTab("tournament")}
+            style={{ display: "flex", alignItems: "center", gap: 6, background: activeTab === "tournament" ? "#1E1E2A" : "transparent", borderColor: activeTab === "tournament" ? "#2A2733" : "transparent", color: activeTab === "tournament" ? "#F1EFF7" : "#8D8998" }}
+          >
+            <Swords size={13} /> GIẢI ĐẤU
+          </div>
           {gamemodes.map((g) => (
             <div
               key={g.id}
@@ -631,6 +689,97 @@ export default function TierLadder() {
             )}
 
             {saveError && <div style={{ fontSize: 12, color: "#E8432B" }}>Lưu dữ liệu thất bại — thử lại thao tác vừa rồi.</div>}
+          </div>
+        ) : activeTab === "tournament" ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            {tournaments.length === 0 && !editMode && (
+              <div style={{ textAlign: "center", color: "#8D8998", padding: "60px 0", fontSize: 14 }}>Chưa có giải đấu nào.</div>
+            )}
+
+            {editMode && (
+              addingTournament ? (
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input className="tl-input" autoFocus placeholder="Tên giải đấu" value={newTournamentName} onChange={(e) => setNewTournamentName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addTournament()} style={{ flex: 1 }} />
+                  <button className="tl-btn" onClick={addTournament}><Check size={14} /> Tạo</button>
+                  <button className="tl-btn" onClick={() => setAddingTournament(false)}><X size={14} /></button>
+                </div>
+              ) : (
+                <button className="tl-btn" onClick={() => setAddingTournament(true)}><Plus size={14} /> Giải đấu mới</button>
+              )
+            )}
+
+            {tournaments.map((t) => (
+              <div key={t.id} style={{ background: "#17151F", border: "1px solid #221F2B", borderRadius: 12, padding: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                  <div className="tl-display" style={{ fontSize: 15, fontWeight: 700 }}>{t.name}</div>
+                  {editMode && <Trash2 size={14} style={{ cursor: "pointer", color: "#8D8998" }} onClick={() => deleteTournament(t.id)} />}
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {t.matches.length === 0 && <div style={{ fontSize: 12, color: "#57546A" }}>Chưa có trận nào.</div>}
+                  {t.matches.map((m) => {
+                    const pa = players.find((p) => p.id === m.playerAId);
+                    const pb = players.find((p) => p.id === m.playerBId);
+                    const mode = gamemodes.find((g) => g.id === m.modeId);
+                    const aWins = m.scoreA > m.scoreB;
+                    const bWins = m.scoreB > m.scoreA;
+                    return (
+                      <div key={m.id} className="tl-card" style={{ justifyContent: "center" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, justifyContent: "flex-end", minWidth: 0 }}>
+                          <span style={{ fontSize: 13, fontWeight: aWins ? 700 : 500, color: aWins ? "#FFD54A" : "#F1EFF7", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pa?.name || "?"}</span>
+                          <Avatar name={pa?.name || "?"} photoUrl={pa?.photoUrl} size={26} />
+                        </div>
+                        <div className="tl-mono" style={{ minWidth: 90, textAlign: "center", fontSize: 15, fontWeight: 700, flexShrink: 0 }}>
+                          {editMode ? (
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 4, justifyContent: "center" }}>
+                              <input type="number" className="tl-point-input" style={{ width: 38 }} value={m.scoreA} onChange={(e) => updateMatchScore(t.id, m.id, "scoreA", e.target.value)} />
+                              :
+                              <input type="number" className="tl-point-input" style={{ width: 38 }} value={m.scoreB} onChange={(e) => updateMatchScore(t.id, m.id, "scoreB", e.target.value)} />
+                            </span>
+                          ) : (
+                            <>{m.scoreA} : {m.scoreB}</>
+                          )}
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
+                          <Avatar name={pb?.name || "?"} photoUrl={pb?.photoUrl} size={26} />
+                          <span style={{ fontSize: 13, fontWeight: bWins ? 700 : 500, color: bWins ? "#FFD54A" : "#F1EFF7", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pb?.name || "?"}</span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 10, flexShrink: 0 }}>
+                          {mode && <span style={{ fontSize: 14 }} title={mode.name}>{mode.icon}</span>}
+                          {editMode && <X size={14} style={{ cursor: "pointer", color: "#8D8998" }} onClick={() => deleteMatch(t.id, m.id)} />}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {editMode && (
+                  addingMatchFor === t.id ? (
+                    <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+                      <select className="tl-select" value={matchDraft.playerAId} onChange={(e) => setMatchDraft((d) => ({ ...d, playerAId: e.target.value }))}>
+                        <option value="">Người chơi A</option>
+                        {players.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                      <input type="number" className="tl-point-input" placeholder="0" value={matchDraft.scoreA} onChange={(e) => setMatchDraft((d) => ({ ...d, scoreA: e.target.value }))} />
+                      <span className="tl-mono" style={{ fontSize: 12, color: "#8D8998" }}>vs</span>
+                      <input type="number" className="tl-point-input" placeholder="0" value={matchDraft.scoreB} onChange={(e) => setMatchDraft((d) => ({ ...d, scoreB: e.target.value }))} />
+                      <select className="tl-select" value={matchDraft.playerBId} onChange={(e) => setMatchDraft((d) => ({ ...d, playerBId: e.target.value }))}>
+                        <option value="">Người chơi B</option>
+                        {players.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                      <select className="tl-select" value={matchDraft.modeId} onChange={(e) => setMatchDraft((d) => ({ ...d, modeId: e.target.value }))}>
+                        <option value="">Chế độ</option>
+                        {gamemodes.map((g) => <option key={g.id} value={g.id}>{g.icon} {g.name}</option>)}
+                      </select>
+                      <Check size={16} style={{ cursor: "pointer", color: "#5FAFC4" }} onClick={() => addMatch(t.id)} />
+                      <X size={16} style={{ cursor: "pointer", color: "#8D8998" }} onClick={() => { setAddingMatchFor(null); setMatchDraft({ playerAId: "", playerBId: "", modeId: "", scoreA: 0, scoreB: 0 }); }} />
+                    </div>
+                  ) : (
+                    <button className="tl-btn" style={{ marginTop: 10 }} onClick={() => setAddingMatchFor(t.id)}><Plus size={14} /> Thêm trận đấu</button>
+                  )
+                )}
+              </div>
+            ))}
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
