@@ -27,6 +27,13 @@ const DEFAULT_MODES = [
   { id: "smp", name: "SMP", icon: "🛡️" },
 ];
 
+const ICON_CHOICES = [
+  "⚔️", "🗡️", "🛡️", "🏹", "🪓", "🔨", "🔱", "🪃",
+  "💎", "🧪", "🔥", "❄️", "⚡", "☠️", "💀", "🩸",
+  "👑", "🎯", "⭐", "🌟", "💥", "🧨", "⛏️", "🏆",
+  "🎮", "🔮", "🌀", "🦴", "🐉", "🕸️", "🧱", "🪄",
+];
+
 const MEDAL = {
   0: { edge: "#FFD54A", glow: "rgba(255,213,74,0.45)", chip: "#FFD54A" },
   1: { edge: "#D6DCE5", glow: "rgba(214,220,229,0.35)", chip: "#D6DCE5" },
@@ -119,6 +126,37 @@ function Avatar({ name, photoUrl, size }) {
   return <div style={s}>{initials(name)}</div>;
 }
 
+function IconPicker({ value, onChange }) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 4, background: "#1E1E2A", border: "1px solid #2A2733", borderRadius: 8, padding: 8, maxWidth: 260 }}>
+      {ICON_CHOICES.map((ic) => (
+        <button
+          key={ic}
+          type="button"
+          onClick={() => onChange(ic)}
+          style={{
+            fontSize: 16,
+            padding: "4px 0",
+            borderRadius: 6,
+            border: value === ic ? "1px solid #5FAFC4" : "1px solid transparent",
+            background: value === ic ? "rgba(95,175,196,0.15)" : "transparent",
+            cursor: "pointer",
+          }}
+        >
+          {ic}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ModeIcon({ g, size = 14 }) {
+  if (g?.iconUrl) {
+    return <img src={g.iconUrl} alt="" style={{ width: size, height: size, objectFit: "cover", borderRadius: 4, flexShrink: 0 }} onError={(e) => { e.target.style.display = "none"; }} />;
+  }
+  return <span style={{ fontSize: size }}>{g?.icon || "⚔️"}</span>;
+}
+
 export default function TierLadder() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -130,6 +168,13 @@ export default function TierLadder() {
   const [addingMode, setAddingMode] = useState(false);
   const [newModeName, setNewModeName] = useState("");
   const [newModeIcon, setNewModeIcon] = useState("⚔️");
+  const [newModeIconUrl, setNewModeIconUrl] = useState("");
+  const [editingModeId, setEditingModeId] = useState(null);
+  const [editModeName, setEditModeName] = useState("");
+  const [editModeIcon, setEditModeIcon] = useState("");
+  const [editModeIconUrl, setEditModeIconUrl] = useState("");
+  const [showEditIconPicker, setShowEditIconPicker] = useState(false);
+  const [showNewIconPicker, setShowNewIconPicker] = useState(false);
   const [renamingId, setRenamingId] = useState(null);
   const [renameValue, setRenameValue] = useState("");
   const [renamePhotoValue, setRenamePhotoValue] = useState("");
@@ -239,9 +284,10 @@ export default function TierLadder() {
     const name = newModeName.trim();
     if (!name) return;
     const id = uid();
-    persist({ ...data, gamemodes: [...gamemodes, { id, name, icon: newModeIcon.trim() || "⚔️" }] });
+    persist({ ...data, gamemodes: [...gamemodes, { id, name, icon: newModeIcon.trim() || "⚔️", iconUrl: newModeIconUrl.trim() || null }] });
     setNewModeName("");
     setNewModeIcon("⚔️");
+    setNewModeIconUrl("");
     setAddingMode(false);
     setActiveTab(id);
   }
@@ -258,6 +304,13 @@ export default function TierLadder() {
       }),
     });
     if (activeTab === id) setActiveTab("overall");
+  }
+
+  function saveModeEdit(id) {
+    const name = editModeName.trim();
+    if (!name) return setEditingModeId(null);
+    persist({ ...data, gamemodes: gamemodes.map((g) => (g.id === id ? { ...g, name, icon: editModeIcon.trim() || "⚔️", iconUrl: editModeIconUrl.trim() || null } : g)) });
+    setEditingModeId(null);
   }
 
   function setTierPoint(code, value) {
@@ -581,24 +634,92 @@ export default function TierLadder() {
           >
             <Swords size={13} /> GIẢI ĐẤU
           </div>
-          {gamemodes.map((g) => (
-            <div
-              key={g.id}
-              className="tl-tab"
-              onClick={() => setActiveTab(g.id)}
-              style={{ background: activeTab === g.id ? "#1E1E2A" : "transparent", borderColor: activeTab === g.id ? "#2A2733" : "transparent", color: activeTab === g.id ? "#F1EFF7" : "#8D8998", display: "flex", alignItems: "center", gap: 8 }}
-            >
-              <span style={{ fontSize: 14 }}>{g.icon || "⚔️"}</span>
-              {g.name.toUpperCase()}
-              {editMode && (
-                <X size={12} onClick={(e) => { e.stopPropagation(); removeMode(g.id); }} style={{ opacity: 0.6 }} />
-              )}
-            </div>
-          ))}
+          {gamemodes.map((g) =>
+            editingModeId === g.id ? (
+              <div key={g.id} style={{ position: "relative", display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+                {editModeIconUrl ? (
+                  <img src={editModeIconUrl} alt="" style={{ width: 34, height: 34, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} onError={(e) => { e.target.style.display = "none"; }} />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowEditIconPicker((s) => !s)}
+                    style={{ width: 36, height: 34, fontSize: 16, background: "#1E1E2A", border: "1px solid #2A2733", borderRadius: 6, cursor: "pointer" }}
+                  >
+                    {editModeIcon}
+                  </button>
+                )}
+                {showEditIconPicker && !editModeIconUrl && (
+                  <div style={{ position: "absolute", top: 38, left: 0, zIndex: 20 }}>
+                    <IconPicker value={editModeIcon} onChange={(ic) => { setEditModeIcon(ic); setShowEditIconPicker(false); }} />
+                  </div>
+                )}
+                <input
+                  className="tl-input"
+                  autoFocus
+                  placeholder="Tên chế độ"
+                  value={editModeName}
+                  onChange={(e) => setEditModeName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && saveModeEdit(g.id)}
+                  style={{ padding: "6px 8px", fontSize: 12, width: 120 }}
+                />
+                <input
+                  className="tl-input"
+                  placeholder="Hoặc dán link ảnh icon"
+                  value={editModeIconUrl}
+                  onChange={(e) => setEditModeIconUrl(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && saveModeEdit(g.id)}
+                  style={{ padding: "6px 8px", fontSize: 12, width: 160 }}
+                />
+                <Check size={16} onClick={() => saveModeEdit(g.id)} style={{ cursor: "pointer", color: "#5FAFC4" }} />
+                <X size={16} onClick={() => { setEditingModeId(null); setShowEditIconPicker(false); }} style={{ cursor: "pointer", color: "#8D8998" }} />
+              </div>
+            ) : (
+              <div
+                key={g.id}
+                className="tl-tab"
+                onClick={() => setActiveTab(g.id)}
+                style={{ background: activeTab === g.id ? "#1E1E2A" : "transparent", borderColor: activeTab === g.id ? "#2A2733" : "transparent", color: activeTab === g.id ? "#F1EFF7" : "#8D8998", display: "flex", alignItems: "center", gap: 8 }}
+              >
+                <ModeIcon g={g} size={16} />
+                {g.name.toUpperCase()}
+                {editMode && (
+                  <>
+                    <Pencil
+                      size={12}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingModeId(g.id);
+                        setEditModeName(g.name);
+                        setEditModeIcon(g.icon || "⚔️");
+                        setEditModeIconUrl(g.iconUrl || "");
+                      }}
+                      style={{ opacity: 0.6 }}
+                    />
+                    <X size={12} onClick={(e) => { e.stopPropagation(); removeMode(g.id); }} style={{ opacity: 0.6 }} />
+                  </>
+                )}
+              </div>
+            )
+          )}
           {editMode &&
             (addingMode ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                <input className="tl-input" style={{ width: 44, padding: "6px 8px", fontSize: 14, textAlign: "center" }} value={newModeIcon} onChange={(e) => setNewModeIcon(e.target.value)} placeholder="⚔️" />
+              <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+                {newModeIconUrl ? (
+                  <img src={newModeIconUrl} alt="" style={{ width: 34, height: 34, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} onError={(e) => { e.target.style.display = "none"; }} />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowNewIconPicker((s) => !s)}
+                    style={{ width: 36, height: 34, fontSize: 16, background: "#1E1E2A", border: "1px solid #2A2733", borderRadius: 6, cursor: "pointer" }}
+                  >
+                    {newModeIcon}
+                  </button>
+                )}
+                {showNewIconPicker && !newModeIconUrl && (
+                  <div style={{ position: "absolute", top: 38, left: 0, zIndex: 20 }}>
+                    <IconPicker value={newModeIcon} onChange={(ic) => { setNewModeIcon(ic); setShowNewIconPicker(false); }} />
+                  </div>
+                )}
                 <input
                   className="tl-input"
                   autoFocus
@@ -606,10 +727,18 @@ export default function TierLadder() {
                   value={newModeName}
                   onChange={(e) => setNewModeName(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && addMode()}
-                  style={{ padding: "6px 8px", fontSize: 12, width: 140 }}
+                  style={{ padding: "6px 8px", fontSize: 12, width: 120 }}
+                />
+                <input
+                  className="tl-input"
+                  placeholder="Hoặc dán link ảnh icon"
+                  value={newModeIconUrl}
+                  onChange={(e) => setNewModeIconUrl(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && addMode()}
+                  style={{ padding: "6px 8px", fontSize: 12, width: 160 }}
                 />
                 <Check size={16} onClick={addMode} style={{ cursor: "pointer", color: "#5FAFC4" }} />
-                <X size={16} onClick={() => setAddingMode(false)} style={{ cursor: "pointer", color: "#8D8998" }} />
+                <X size={16} onClick={() => { setAddingMode(false); setShowNewIconPicker(false); setNewModeIconUrl(""); }} style={{ cursor: "pointer", color: "#8D8998" }} />
               </div>
             ) : (
               <div className="tl-tab" onClick={() => setAddingMode(true)} style={{ color: "#8D8998", display: "flex", alignItems: "center", gap: 4 }}>
@@ -728,7 +857,7 @@ export default function TierLadder() {
                           className="tl-mono"
                           style={{ fontSize: 11, padding: "1px 6px", borderRadius: 4, background: c.bg, color: c.text, display: "inline-flex", alignItems: "center", gap: 3, opacity: isRetired ? 0.35 : meta.code === "UR" ? 0.4 : 1 }}
                         >
-                          <span style={{ fontSize: 11 }}>{g.icon || "⚔️"}</span>
+                          <ModeIcon g={g} size={13} />
                           {meta.code === "UR" ? "—" : meta.code}
                         </span>
                       );
@@ -895,7 +1024,7 @@ export default function TierLadder() {
                                     {gamemodes.map((g) => <option key={g.id} value={g.id}>{g.icon} {g.name}</option>)}
                                   </select>
                                 )}
-                                {!editMode && mode && <div style={{ fontSize: 10, color: "#8D8998", textAlign: "center" }}>{mode.icon} {mode.name}</div>}
+                                {!editMode && mode && <div style={{ fontSize: 10, color: "#8D8998", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: 3 }}><ModeIcon g={mode} size={12} /> {mode.name}</div>}
                               </div>
                             );
                           })}
@@ -935,7 +1064,7 @@ export default function TierLadder() {
                               <span style={{ fontSize: 13, fontWeight: bWins ? 700 : 500, color: bWins ? "#FFD54A" : "#F1EFF7", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pb?.name || "?"}</span>
                             </div>
                             <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 10, flexShrink: 0 }}>
-                              {mode && <span style={{ fontSize: 14 }} title={mode.name}>{mode.icon}</span>}
+                              {mode && <span title={mode.name}><ModeIcon g={mode} size={14} /></span>}
                               {editMode && <X size={14} style={{ cursor: "pointer", color: "#8D8998" }} onClick={() => deleteMatch(t.id, m.id)} />}
                             </div>
                           </div>
@@ -1061,7 +1190,7 @@ export default function TierLadder() {
                   const c = GROUP_COLOR[meta.group];
                   return (
                     <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 10, background: "#17151F", border: "1px solid #221F2B", borderRadius: 10, padding: "10px 12px", borderLeft: `3px solid ${c.edge}`, opacity: isRetired ? 0.6 : 1 }}>
-                      <span style={{ fontSize: 18, width: 22, textAlign: "center" }}>{g.icon || "⚔️"}</span>
+                      <span style={{ width: 22, display: "flex", justifyContent: "center" }}><ModeIcon g={g} size={18} /></span>
                       <span style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>{g.name}</span>
                       {isRetired && (
                         <span className="tl-mono" style={{ fontSize: 10, padding: "2px 6px", borderRadius: 5, background: "rgba(87,84,106,0.2)", color: "#8D8998" }}>NGHỈ HƯU</span>
