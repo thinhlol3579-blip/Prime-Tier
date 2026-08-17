@@ -419,7 +419,7 @@ export default function TierLadder() {
 
   function adjustPinnedOffset(delta) {
     const current = data?.pinnedBoardOffset || 0;
-    const next = Math.max(-60, Math.min(20, current + delta));
+    const next = Math.max(-20, Math.min(20, current + delta));
     persist({ ...data, pinnedBoardOffset: next });
   }
 
@@ -702,9 +702,8 @@ export default function TierLadder() {
                 boxShadow: "0 0 30px rgba(232,67,43,0.08)",
               }}
             >
-              <div style={{ position: "absolute", top: -11, left: "50%", transform: "translateX(-50%)", background: "#131119", border: "1px solid #2A2733", borderRadius: 20, padding: "3px 14px", display: "flex", alignItems: "center", gap: 5 }}>
-                <Pin size={11} style={{ color: "#E8432B" }} />
-                <span className="tl-mono" style={{ fontSize: 10, color: "#8D8998", letterSpacing: "0.05em" }}>TRẬN ĐẤU NỔI BẬT</span>
+              <div style={{ position: "absolute", top: -11, left: "50%", transform: "translateX(-50%)", background: "#131119", border: "1px solid #2A2733", borderRadius: 20, padding: "4px 8px", display: "flex", alignItems: "center" }}>
+                <Pin size={12} style={{ color: "#E8432B" }} />
               </div>
               <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
                 {pinnedInfo.teamA.map((p) => (
