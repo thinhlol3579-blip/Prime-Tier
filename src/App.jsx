@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Flame, Plus, X, Trash2, Settings, Trophy, Pencil, Check, Sliders, Search, Ban, Download, Swords } from "lucide-react";
+import { Flame, Plus, X, Trash2, Settings, Trophy, Pencil, Check, Sliders, Search, Ban, Download, Swords, Pin, ChevronUp, ChevronDown } from "lucide-react";
 import { db } from "./firebase";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 
@@ -38,6 +38,12 @@ const MEDAL = {
   0: { edge: "#FFD54A", glow: "rgba(255,213,74,0.45)", chip: "#FFD54A" },
   1: { edge: "#D6DCE5", glow: "rgba(214,220,229,0.35)", chip: "#D6DCE5" },
   2: { edge: "#E29659", glow: "rgba(226,150,89,0.35)", chip: "#E29659" },
+};
+
+const PIN_BOARD_SIZES = {
+  sm: { avatar: 26, name: 12, score: 20, padding: "8px 18px", gap: 14, labelFont: 9 },
+  md: { avatar: 32, name: 14, score: 26, padding: "12px 26px", gap: 18, labelFont: 10 },
+  lg: { avatar: 40, name: 17, score: 34, padding: "20px 38px", gap: 30, labelFont: 11 },
 };
 
 const DOC_REF_PATH = ["tierLadder", "data"];
@@ -401,6 +407,22 @@ export default function TierLadder() {
     persist({ ...data, tournaments: tournaments.map((x) => (x.id === tournamentId ? { ...x, rounds: newRounds } : x)) });
   }
 
+  function togglePin(ref) {
+    const current = data?.pinnedMatch;
+    const same = current && current.tournamentId === ref.tournamentId && current.matchId === ref.matchId && current.roundIdx === ref.roundIdx;
+    persist({ ...data, pinnedMatch: same ? null : ref });
+  }
+
+  function setPinnedBoardSize(size) {
+    persist({ ...data, pinnedBoardSize: size });
+  }
+
+  function adjustPinnedOffset(delta) {
+    const current = data?.pinnedBoardOffset || 0;
+    const next = Math.max(-60, Math.min(20, current + delta));
+    persist({ ...data, pinnedBoardOffset: next });
+  }
+
   async function exportCard(player) {
     const width = 640;
     const rowH = 54;
@@ -553,6 +575,21 @@ export default function TierLadder() {
     return groups;
   }, [players, activeMode, tierPoints, query]);
 
+  const pinnedInfo = useMemo(() => {
+    const ref = data?.pinnedMatch;
+    if (!ref) return null;
+    const t = tournaments.find((x) => x.id === ref.tournamentId);
+    if (!t) return null;
+    const m = ref.roundIdx !== undefined && ref.roundIdx !== null ? t.rounds?.[ref.roundIdx]?.find((x) => x.id === ref.matchId) : t.matches?.find((x) => x.id === ref.matchId);
+    if (!m) return null;
+    const teamAIds = m.teamA || (m.playerAId ? [m.playerAId] : []);
+    const teamBIds = m.teamB || (m.playerBId ? [m.playerBId] : []);
+    const teamA = teamAIds.map((id) => players.find((p) => p.id === id)).filter(Boolean);
+    const teamB = teamBIds.map((id) => players.find((p) => p.id === id)).filter(Boolean);
+    const mode = gamemodes.find((g) => g.id === m.modeId);
+    return { tournamentName: t.name, teamA, teamB, scoreA: m.scoreA, scoreB: m.scoreB, mode };
+  }, [data, tournaments, players, gamemodes]);
+
   if (loading) {
     return (
       <div style={{ minHeight: 300, display: "flex", alignItems: "center", justifyContent: "center", background: "#0D0C12", color: "#8D8998", fontFamily: "Inter, sans-serif" }}>
@@ -579,7 +616,7 @@ export default function TierLadder() {
       `}</style>
 
       <div style={{ borderBottom: "1px solid #1E1C27", padding: "22px 28px 0" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18, gap: 10, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: pinnedInfo ? 2 : 18, gap: 10, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <Flame size={22} color="#E8432B" />
             <div>
@@ -614,6 +651,91 @@ export default function TierLadder() {
             </button>
           </div>
         </div>
+
+        {pinnedInfo && (() => {
+          const sz = PIN_BOARD_SIZES[data?.pinnedBoardSize || "md"];
+          const offset = data?.pinnedBoardOffset || 0;
+          return (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, marginTop: offset, marginBottom: 14 }}>
+            {editMode && (
+              <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                {["sm", "md", "lg"].map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setPinnedBoardSize(s)}
+                    className="tl-mono"
+                    style={{
+                      fontSize: 10,
+                      padding: "2px 8px",
+                      borderRadius: 5,
+                      cursor: "pointer",
+                      border: (data?.pinnedBoardSize || "md") === s ? "1px solid #5FAFC4" : "1px solid #2A2733",
+                      background: (data?.pinnedBoardSize || "md") === s ? "rgba(95,175,196,0.15)" : "#1E1E2A",
+                      color: "#F1EFF7",
+                    }}
+                  >
+                    {s.toUpperCase()}
+                  </button>
+                ))}
+                <div style={{ display: "flex", gap: 2, marginLeft: 6, border: "1px solid #2A2733", borderRadius: 5, overflow: "hidden" }}>
+                  <button type="button" onClick={() => adjustPinnedOffset(-6)} style={{ background: "#1E1E2A", border: "none", padding: "2px 6px", cursor: "pointer" }} title="Đẩy lên">
+                    <ChevronUp size={12} color="#F1EFF7" />
+                  </button>
+                  <button type="button" onClick={() => adjustPinnedOffset(6)} style={{ background: "#1E1E2A", border: "none", padding: "2px 6px", cursor: "pointer" }} title="Đẩy xuống">
+                    <ChevronDown size={12} color="#F1EFF7" />
+                  </button>
+                </div>
+              </div>
+            )}
+            <div
+              style={{
+                background: "linear-gradient(135deg, rgba(232,67,43,0.14), rgba(95,175,196,0.10))",
+                border: "1px solid #2A2733",
+                borderRadius: 16,
+                padding: sz.padding,
+                display: "flex",
+                alignItems: "center",
+                gap: sz.gap,
+                maxWidth: "100%",
+                position: "relative",
+                boxShadow: "0 0 30px rgba(232,67,43,0.08)",
+              }}
+            >
+              <div style={{ position: "absolute", top: -11, left: "50%", transform: "translateX(-50%)", background: "#131119", border: "1px solid #2A2733", borderRadius: 20, padding: "3px 14px", display: "flex", alignItems: "center", gap: 5 }}>
+                <Pin size={11} style={{ color: "#E8432B" }} />
+                <span className="tl-mono" style={{ fontSize: 10, color: "#8D8998", letterSpacing: "0.05em" }}>TRẬN ĐẤU NỔI BẬT</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+                {pinnedInfo.teamA.map((p) => (
+                  <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontSize: sz.name, fontWeight: 700, color: pinnedInfo.scoreA > pinnedInfo.scoreB ? "#FFD54A" : "#F1EFF7" }}>{p.name}</span>
+                    <Avatar name={p.name} photoUrl={p.photoUrl} size={sz.avatar} />
+                  </div>
+                ))}
+              </div>
+              <div style={{ textAlign: "center", minWidth: 90 }}>
+                {pinnedInfo.tournamentName && <div className="tl-mono" style={{ fontSize: sz.labelFont, color: "#8D8998", marginBottom: 4 }}>{pinnedInfo.tournamentName.toUpperCase()}</div>}
+                <div className="tl-mono" style={{ fontSize: sz.score, fontWeight: 700 }}>{pinnedInfo.scoreA} : {pinnedInfo.scoreB}</div>
+                {pinnedInfo.mode && (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 5, marginTop: 6 }}>
+                    <ModeIcon g={pinnedInfo.mode} size={15} />
+                    <span style={{ fontSize: 11, color: "#8D8998" }}>{pinnedInfo.mode.name}</span>
+                  </div>
+                )}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8 }}>
+                {pinnedInfo.teamB.map((p) => (
+                  <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <Avatar name={p.name} photoUrl={p.photoUrl} size={sz.avatar} />
+                    <span style={{ fontSize: sz.name, fontWeight: 700, color: pinnedInfo.scoreB > pinnedInfo.scoreA ? "#FFD54A" : "#F1EFF7" }}>{p.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          );
+        })()}
 
         {editMode && showPoints && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 10, background: "#17151F", border: "1px solid #221F2B", borderRadius: 10, padding: 12, marginBottom: 16 }}>
@@ -1031,10 +1153,21 @@ export default function TierLadder() {
                                   );
                                 })}
                                 {editMode && m.playerAId && m.playerBId && (
-                                  <select className="tl-select" style={{ fontSize: 10, marginTop: 2 }} value={m.modeId || ""} onChange={(e) => updateBracketMatch(t.id, ri, mi, "modeId", e.target.value)}>
-                                    <option value="">Chế độ</option>
-                                    {gamemodes.map((g) => <option key={g.id} value={g.id}>{g.icon} {g.name}</option>)}
-                                  </select>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 2 }}>
+                                    <select className="tl-select" style={{ fontSize: 10, flex: 1 }} value={m.modeId || ""} onChange={(e) => updateBracketMatch(t.id, ri, mi, "modeId", e.target.value)}>
+                                      <option value="">Chế độ</option>
+                                      {gamemodes.map((g) => <option key={g.id} value={g.id}>{g.icon} {g.name}</option>)}
+                                    </select>
+                                    <Pin
+                                      size={13}
+                                      onClick={() => togglePin({ tournamentId: t.id, matchId: m.id, roundIdx: ri })}
+                                      style={{
+                                        cursor: "pointer",
+                                        flexShrink: 0,
+                                        color: data?.pinnedMatch?.tournamentId === t.id && data?.pinnedMatch?.matchId === m.id && data?.pinnedMatch?.roundIdx === ri ? "#FFD54A" : "#8D8998",
+                                      }}
+                                    />
+                                  </div>
                                 )}
                                 {!editMode && mode && <div style={{ fontSize: 10, color: "#8D8998", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: 3 }}><ModeIcon g={mode} size={12} /> {mode.name}</div>}
                               </div>
@@ -1088,7 +1221,19 @@ export default function TierLadder() {
                                 </div>
                               ))}
                             </div>
-                            {editMode && <X size={14} style={{ cursor: "pointer", color: "#8D8998", flexShrink: 0, marginLeft: 6 }} onClick={() => deleteMatch(t.id, m.id)} />}
+                            {editMode && (
+                              <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 6, flexShrink: 0 }}>
+                                <Pin
+                                  size={14}
+                                  onClick={() => togglePin({ tournamentId: t.id, matchId: m.id })}
+                                  style={{
+                                    cursor: "pointer",
+                                    color: data?.pinnedMatch?.tournamentId === t.id && data?.pinnedMatch?.matchId === m.id ? "#FFD54A" : "#8D8998",
+                                  }}
+                                />
+                                <X size={14} style={{ cursor: "pointer", color: "#8D8998" }} onClick={() => deleteMatch(t.id, m.id)} />
+                              </div>
+                            )}
                           </div>
                         );
                       })}
