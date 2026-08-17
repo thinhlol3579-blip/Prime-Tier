@@ -188,7 +188,7 @@ export default function TierLadder() {
   const [bracketSize, setBracketSize] = useState(4);
   const [bracketSlots, setBracketSlots] = useState(["", "", "", ""]);
   const [addingMatchFor, setAddingMatchFor] = useState(null);
-  const [matchDraft, setMatchDraft] = useState({ playerAId: "", playerBId: "", modeId: "", scoreA: 0, scoreB: 0 });
+  const [matchDraft, setMatchDraft] = useState({ teamA: [], teamB: [], modeId: "", scoreA: 0, scoreB: 0 });
 
   useEffect(() => {
     const ref = doc(db, ...DOC_REF_PATH);
@@ -344,18 +344,30 @@ export default function TierLadder() {
   }
 
   function addMatch(tournamentId) {
-    const { playerAId, playerBId, modeId, scoreA, scoreB } = matchDraft;
-    if (!playerAId || !playerBId || playerAId === playerBId) {
-      alert("Chọn 2 người chơi khác nhau.");
+    const { teamA, teamB, modeId, scoreA, scoreB } = matchDraft;
+    if (teamA.length === 0 || teamB.length === 0) {
+      alert("Chọn ít nhất 1 người cho mỗi đội.");
       return;
     }
-    const match = { id: uid(), playerAId, playerBId, modeId: modeId || null, scoreA: Number(scoreA) || 0, scoreB: Number(scoreB) || 0 };
+    const match = { id: uid(), teamA, teamB, modeId: modeId || null, scoreA: Number(scoreA) || 0, scoreB: Number(scoreB) || 0 };
     persist({
       ...data,
       tournaments: tournaments.map((t) => (t.id === tournamentId ? { ...t, matches: [...t.matches, match] } : t)),
     });
-    setMatchDraft({ playerAId: "", playerBId: "", modeId: "", scoreA: 0, scoreB: 0 });
+    setMatchDraft({ teamA: [], teamB: [], modeId: "", scoreA: 0, scoreB: 0 });
     setAddingMatchFor(null);
+  }
+
+  function toggleDraftPlayer(team, playerId) {
+    setMatchDraft((d) => {
+      const otherKey = team === "A" ? "teamB" : "teamA";
+      const mineKey = team === "A" ? "teamA" : "teamB";
+      if (d[otherKey].includes(playerId)) return d;
+      const set = new Set(d[mineKey]);
+      if (set.has(playerId)) set.delete(playerId);
+      else set.add(playerId);
+      return { ...d, [mineKey]: Array.from(set) };
+    });
   }
 
   function deleteMatch(tournamentId, matchId) {
@@ -1037,18 +1049,24 @@ export default function TierLadder() {
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                       {t.matches.length === 0 && <div style={{ fontSize: 12, color: "#57546A" }}>Chưa có trận nào.</div>}
                       {t.matches.map((m) => {
-                        const pa = players.find((p) => p.id === m.playerAId);
-                        const pb = players.find((p) => p.id === m.playerBId);
+                        const teamAIds = m.teamA || (m.playerAId ? [m.playerAId] : []);
+                        const teamBIds = m.teamB || (m.playerBId ? [m.playerBId] : []);
+                        const teamAPlayers = teamAIds.map((id) => players.find((p) => p.id === id)).filter(Boolean);
+                        const teamBPlayers = teamBIds.map((id) => players.find((p) => p.id === id)).filter(Boolean);
                         const mode = gamemodes.find((g) => g.id === m.modeId);
                         const aWins = m.scoreA > m.scoreB;
                         const bWins = m.scoreB > m.scoreA;
                         return (
-                          <div key={m.id} className="tl-card" style={{ justifyContent: "center" }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, justifyContent: "flex-end", minWidth: 0 }}>
-                              <span style={{ fontSize: 13, fontWeight: aWins ? 700 : 500, color: aWins ? "#FFD54A" : "#F1EFF7", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pa?.name || "?"}</span>
-                              <Avatar name={pa?.name || "?"} photoUrl={pa?.photoUrl} size={26} />
+                          <div key={m.id} className="tl-card" style={{ justifyContent: "center", alignItems: "flex-start" }}>
+                            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flex: 1, minWidth: 0 }}>
+                              {teamAPlayers.map((p) => (
+                                <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                  <span style={{ fontSize: 13, fontWeight: aWins ? 700 : 500, color: aWins ? "#FFD54A" : "#F1EFF7", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 110 }}>{p.name}</span>
+                                  <Avatar name={p.name} photoUrl={p.photoUrl} size={22} />
+                                </div>
+                              ))}
                             </div>
-                            <div className="tl-mono" style={{ minWidth: 90, textAlign: "center", fontSize: 15, fontWeight: 700, flexShrink: 0 }}>
+                            <div className="tl-mono" style={{ minWidth: 90, textAlign: "center", fontSize: 15, fontWeight: 700, flexShrink: 0, paddingTop: 2 }}>
                               {editMode ? (
                                 <span style={{ display: "inline-flex", alignItems: "center", gap: 4, justifyContent: "center" }}>
                                   <input type="number" className="tl-point-input" style={{ width: 38 }} value={m.scoreA} onChange={(e) => updateMatchScore(t.id, m.id, "scoreA", e.target.value)} />
@@ -1058,15 +1076,19 @@ export default function TierLadder() {
                               ) : (
                                 <>{m.scoreA} : {m.scoreB}</>
                               )}
+                              <div style={{ marginTop: 4 }}>
+                                {mode && <span title={mode.name}><ModeIcon g={mode} size={14} /></span>}
+                              </div>
                             </div>
-                            <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
-                              <Avatar name={pb?.name || "?"} photoUrl={pb?.photoUrl} size={26} />
-                              <span style={{ fontSize: 13, fontWeight: bWins ? 700 : 500, color: bWins ? "#FFD54A" : "#F1EFF7", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pb?.name || "?"}</span>
+                            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 4, flex: 1, minWidth: 0 }}>
+                              {teamBPlayers.map((p) => (
+                                <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                  <Avatar name={p.name} photoUrl={p.photoUrl} size={22} />
+                                  <span style={{ fontSize: 13, fontWeight: bWins ? 700 : 500, color: bWins ? "#FFD54A" : "#F1EFF7", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 110 }}>{p.name}</span>
+                                </div>
+                              ))}
                             </div>
-                            <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 10, flexShrink: 0 }}>
-                              {mode && <span title={mode.name}><ModeIcon g={mode} size={14} /></span>}
-                              {editMode && <X size={14} style={{ cursor: "pointer", color: "#8D8998" }} onClick={() => deleteMatch(t.id, m.id)} />}
-                            </div>
+                            {editMode && <X size={14} style={{ cursor: "pointer", color: "#8D8998", flexShrink: 0, marginLeft: 6 }} onClick={() => deleteMatch(t.id, m.id)} />}
                           </div>
                         );
                       })}
@@ -1074,24 +1096,76 @@ export default function TierLadder() {
 
                     {editMode && (
                       addingMatchFor === t.id ? (
-                        <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
-                          <select className="tl-select" value={matchDraft.playerAId} onChange={(e) => setMatchDraft((d) => ({ ...d, playerAId: e.target.value }))}>
-                            <option value="">Người chơi A</option>
-                            {players.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                          </select>
-                          <input type="number" className="tl-point-input" placeholder="0" value={matchDraft.scoreA} onChange={(e) => setMatchDraft((d) => ({ ...d, scoreA: e.target.value }))} />
-                          <span className="tl-mono" style={{ fontSize: 12, color: "#8D8998" }}>vs</span>
-                          <input type="number" className="tl-point-input" placeholder="0" value={matchDraft.scoreB} onChange={(e) => setMatchDraft((d) => ({ ...d, scoreB: e.target.value }))} />
-                          <select className="tl-select" value={matchDraft.playerBId} onChange={(e) => setMatchDraft((d) => ({ ...d, playerBId: e.target.value }))}>
-                            <option value="">Người chơi B</option>
-                            {players.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                          </select>
-                          <select className="tl-select" value={matchDraft.modeId} onChange={(e) => setMatchDraft((d) => ({ ...d, modeId: e.target.value }))}>
-                            <option value="">Chế độ</option>
-                            {gamemodes.map((g) => <option key={g.id} value={g.id}>{g.icon} {g.name}</option>)}
-                          </select>
-                          <Check size={16} style={{ cursor: "pointer", color: "#5FAFC4" }} onClick={() => addMatch(t.id)} />
-                          <X size={16} style={{ cursor: "pointer", color: "#8D8998" }} onClick={() => { setAddingMatchFor(null); setMatchDraft({ playerAId: "", playerBId: "", modeId: "", scoreA: 0, scoreB: 0 }); }} />
+                        <div style={{ marginTop: 10, background: "#1A1720", border: "1px solid #221F2B", borderRadius: 10, padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+                          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                            <div style={{ flex: 1, minWidth: 160 }}>
+                              <div className="tl-mono" style={{ fontSize: 10, color: "#8D8998", marginBottom: 4 }}>ĐỘI A ({matchDraft.teamA.length})</div>
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                                {players.map((p) => {
+                                  const inA = matchDraft.teamA.includes(p.id);
+                                  const inB = matchDraft.teamB.includes(p.id);
+                                  return (
+                                    <button
+                                      key={p.id}
+                                      type="button"
+                                      disabled={inB}
+                                      onClick={() => toggleDraftPlayer("A", p.id)}
+                                      style={{
+                                        fontSize: 11,
+                                        padding: "3px 9px",
+                                        borderRadius: 12,
+                                        border: inA ? "1px solid #5FAFC4" : "1px solid #2A2733",
+                                        background: inA ? "rgba(95,175,196,0.15)" : "#1E1E2A",
+                                        color: inB ? "#4A4855" : "#F1EFF7",
+                                        cursor: inB ? "not-allowed" : "pointer",
+                                      }}
+                                    >
+                                      {p.name}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                            <div style={{ flex: 1, minWidth: 160 }}>
+                              <div className="tl-mono" style={{ fontSize: 10, color: "#8D8998", marginBottom: 4 }}>ĐỘI B ({matchDraft.teamB.length})</div>
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                                {players.map((p) => {
+                                  const inA = matchDraft.teamA.includes(p.id);
+                                  const inB = matchDraft.teamB.includes(p.id);
+                                  return (
+                                    <button
+                                      key={p.id}
+                                      type="button"
+                                      disabled={inA}
+                                      onClick={() => toggleDraftPlayer("B", p.id)}
+                                      style={{
+                                        fontSize: 11,
+                                        padding: "3px 9px",
+                                        borderRadius: 12,
+                                        border: inB ? "1px solid #5FAFC4" : "1px solid #2A2733",
+                                        background: inB ? "rgba(95,175,196,0.15)" : "#1E1E2A",
+                                        color: inA ? "#4A4855" : "#F1EFF7",
+                                        cursor: inA ? "not-allowed" : "pointer",
+                                      }}
+                                    >
+                                      {p.name}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                            <input type="number" className="tl-point-input" placeholder="0" value={matchDraft.scoreA} onChange={(e) => setMatchDraft((d) => ({ ...d, scoreA: e.target.value }))} />
+                            <span className="tl-mono" style={{ fontSize: 12, color: "#8D8998" }}>vs</span>
+                            <input type="number" className="tl-point-input" placeholder="0" value={matchDraft.scoreB} onChange={(e) => setMatchDraft((d) => ({ ...d, scoreB: e.target.value }))} />
+                            <select className="tl-select" value={matchDraft.modeId} onChange={(e) => setMatchDraft((d) => ({ ...d, modeId: e.target.value }))}>
+                              <option value="">Chế độ</option>
+                              {gamemodes.map((g) => <option key={g.id} value={g.id}>{g.icon} {g.name}</option>)}
+                            </select>
+                            <button className="tl-btn" onClick={() => addMatch(t.id)}><Check size={14} /> Thêm trận</button>
+                            <button className="tl-btn" onClick={() => { setAddingMatchFor(null); setMatchDraft({ teamA: [], teamB: [], modeId: "", scoreA: 0, scoreB: 0 }); }}><X size={14} /></button>
+                          </div>
                         </div>
                       ) : (
                         <button className="tl-btn" style={{ marginTop: 10 }} onClick={() => setAddingMatchFor(t.id)}><Plus size={14} /> Thêm trận đấu</button>
