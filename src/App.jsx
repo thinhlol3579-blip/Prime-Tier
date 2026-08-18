@@ -103,7 +103,7 @@ function recomputeBracket(rounds) {
         parent[slot] = winnerId;
         parent.scoreA = 0;
         parent.scoreB = 0;
-        parent.modeId = null;
+        parent.modeIds = [];
       }
     }
   }
@@ -113,14 +113,14 @@ function recomputeBracket(rounds) {
 function buildBracketRounds(size, slots) {
   const round0 = [];
   for (let i = 0; i < size / 2; i++) {
-    round0.push({ id: uid(), playerAId: slots[i * 2] || null, playerBId: slots[i * 2 + 1] || null, scoreA: 0, scoreB: 0, modeId: null });
+    round0.push({ id: uid(), playerAId: slots[i * 2] || null, playerBId: slots[i * 2 + 1] || null, scoreA: 0, scoreB: 0, modeIds: [] });
   }
   const rounds = [round0];
   let count = size / 2;
   while (count > 1) {
     count = count / 2;
     const round = [];
-    for (let i = 0; i < count; i++) round.push({ id: uid(), playerAId: null, playerBId: null, scoreA: 0, scoreB: 0, modeId: null });
+    for (let i = 0; i < count; i++) round.push({ id: uid(), playerAId: null, playerBId: null, scoreA: 0, scoreB: 0, modeIds: [] });
     rounds.push(round);
   }
   return recomputeBracket(rounds);
@@ -194,7 +194,7 @@ export default function TierLadder() {
   const [bracketSize, setBracketSize] = useState(4);
   const [bracketSlots, setBracketSlots] = useState(["", "", "", ""]);
   const [addingMatchFor, setAddingMatchFor] = useState(null);
-  const [matchDraft, setMatchDraft] = useState({ teamA: [], teamB: [], modeId: "", scoreA: 0, scoreB: 0 });
+  const [matchDraft, setMatchDraft] = useState({ teamA: [], teamB: [], modeIds: [], scoreA: 0, scoreB: 0 });
 
   useEffect(() => {
     const ref = doc(db, ...DOC_REF_PATH);
@@ -350,17 +350,17 @@ export default function TierLadder() {
   }
 
   function addMatch(tournamentId) {
-    const { teamA, teamB, modeId, scoreA, scoreB } = matchDraft;
+    const { teamA, teamB, modeIds, scoreA, scoreB } = matchDraft;
     if (teamA.length === 0 || teamB.length === 0) {
       alert("Chọn ít nhất 1 người cho mỗi đội.");
       return;
     }
-    const match = { id: uid(), teamA, teamB, modeId: modeId || null, scoreA: Number(scoreA) || 0, scoreB: Number(scoreB) || 0 };
+    const match = { id: uid(), teamA, teamB, modeIds: modeIds || [], scoreA: Number(scoreA) || 0, scoreB: Number(scoreB) || 0 };
     persist({
       ...data,
       tournaments: tournaments.map((t) => (t.id === tournamentId ? { ...t, matches: [...t.matches, match] } : t)),
     });
-    setMatchDraft({ teamA: [], teamB: [], modeId: "", scoreA: 0, scoreB: 0 });
+    setMatchDraft({ teamA: [], teamB: [], modeIds: [], scoreA: 0, scoreB: 0 });
     setAddingMatchFor(null);
   }
 
@@ -373,6 +373,15 @@ export default function TierLadder() {
       if (set.has(playerId)) set.delete(playerId);
       else set.add(playerId);
       return { ...d, [mineKey]: Array.from(set) };
+    });
+  }
+
+  function toggleDraftMode(modeId) {
+    setMatchDraft((d) => {
+      const set = new Set(d.modeIds);
+      if (set.has(modeId)) set.delete(modeId);
+      else set.add(modeId);
+      return { ...d, modeIds: Array.from(set) };
     });
   }
 
@@ -393,6 +402,26 @@ export default function TierLadder() {
     });
   }
 
+  function updateMatchModes(tournamentId, matchId, modeId) {
+    persist({
+      ...data,
+      tournaments: tournaments.map((t) =>
+        t.id !== tournamentId
+          ? t
+          : {
+              ...t,
+              matches: t.matches.map((m) => {
+                if (m.id !== matchId) return m;
+                const ids = new Set(m.modeIds || (m.modeId ? [m.modeId] : []));
+                if (ids.has(modeId)) ids.delete(modeId);
+                else ids.add(modeId);
+                return { ...m, modeIds: Array.from(ids) };
+              }),
+            }
+      ),
+    });
+  }
+
   function updateBracketMatch(tournamentId, roundIdx, matchIdx, field, value) {
     const t = tournaments.find((x) => x.id === tournamentId);
     if (!t) return;
@@ -400,8 +429,11 @@ export default function TierLadder() {
     const match = rounds[roundIdx][matchIdx];
     if (field === "scoreA" || field === "scoreB") {
       match[field] = Math.max(0, Number(value) || 0);
-    } else if (field === "modeId") {
-      match.modeId = value || null;
+    } else if (field === "toggleMode") {
+      const ids = new Set(match.modeIds || (match.modeId ? [match.modeId] : []));
+      if (ids.has(value)) ids.delete(value);
+      else ids.add(value);
+      match.modeIds = Array.from(ids);
     }
     const newRounds = recomputeBracket(rounds);
     persist({ ...data, tournaments: tournaments.map((x) => (x.id === tournamentId ? { ...x, rounds: newRounds } : x)) });
@@ -419,7 +451,7 @@ export default function TierLadder() {
 
   function adjustPinnedOffset(delta) {
     const current = data?.pinnedBoardOffset || 0;
-    const next = Math.max(-20, Math.min(20, current + delta));
+    const next = Math.max(-150, Math.min(60, current + delta));
     persist({ ...data, pinnedBoardOffset: next });
   }
 
@@ -586,8 +618,9 @@ export default function TierLadder() {
     const teamBIds = m.teamB || (m.playerBId ? [m.playerBId] : []);
     const teamA = teamAIds.map((id) => players.find((p) => p.id === id)).filter(Boolean);
     const teamB = teamBIds.map((id) => players.find((p) => p.id === id)).filter(Boolean);
-    const mode = gamemodes.find((g) => g.id === m.modeId);
-    return { tournamentName: t.name, teamA, teamB, scoreA: m.scoreA, scoreB: m.scoreB, mode };
+    const modeIds = m.modeIds || (m.modeId ? [m.modeId] : []);
+    const modes = modeIds.map((id) => gamemodes.find((g) => g.id === id)).filter(Boolean);
+    return { tournamentName: t.name, teamA, teamB, scoreA: m.scoreA, scoreB: m.scoreB, modes };
   }, [data, tournaments, players, gamemodes]);
 
   if (loading) {
@@ -679,10 +712,10 @@ export default function TierLadder() {
                   </button>
                 ))}
                 <div style={{ display: "flex", gap: 2, marginLeft: 6, border: "1px solid #2A2733", borderRadius: 5, overflow: "hidden" }}>
-                  <button type="button" onClick={() => adjustPinnedOffset(-6)} style={{ background: "#1E1E2A", border: "none", padding: "2px 6px", cursor: "pointer" }} title="Đẩy lên">
+                  <button type="button" onClick={() => adjustPinnedOffset(-10)} style={{ background: "#1E1E2A", border: "none", padding: "2px 6px", cursor: "pointer" }} title="Đẩy lên">
                     <ChevronUp size={12} color="#F1EFF7" />
                   </button>
-                  <button type="button" onClick={() => adjustPinnedOffset(6)} style={{ background: "#1E1E2A", border: "none", padding: "2px 6px", cursor: "pointer" }} title="Đẩy xuống">
+                  <button type="button" onClick={() => adjustPinnedOffset(10)} style={{ background: "#1E1E2A", border: "none", padding: "2px 6px", cursor: "pointer" }} title="Đẩy xuống">
                     <ChevronDown size={12} color="#F1EFF7" />
                   </button>
                 </div>
@@ -716,10 +749,13 @@ export default function TierLadder() {
               <div style={{ textAlign: "center", minWidth: 90 }}>
                 {pinnedInfo.tournamentName && <div className="tl-mono" style={{ fontSize: sz.labelFont, color: "#8D8998", marginBottom: 4 }}>{pinnedInfo.tournamentName.toUpperCase()}</div>}
                 <div className="tl-mono" style={{ fontSize: sz.score, fontWeight: 700 }}>{pinnedInfo.scoreA} : {pinnedInfo.scoreB}</div>
-                {pinnedInfo.mode && (
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 5, marginTop: 6 }}>
-                    <ModeIcon g={pinnedInfo.mode} size={15} />
-                    <span style={{ fontSize: 11, color: "#8D8998" }}>{pinnedInfo.mode.name}</span>
+                {pinnedInfo.modes && pinnedInfo.modes.length > 0 && (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                    {pinnedInfo.modes.map((mode) => (
+                      <div key={mode.id} style={{ display: "flex", alignItems: "center", gap: 4 }} title={mode.name}>
+                        <ModeIcon g={mode} size={15} />
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -1126,7 +1162,8 @@ export default function TierLadder() {
                           <div className="tl-display" style={{ fontSize: 11, fontWeight: 600, color: "#8D8998", textAlign: "center", letterSpacing: "0.05em" }}>{label}</div>
                           {round.map((m, mi) => {
                             const winnerId = matchWinner(m);
-                            const mode = gamemodes.find((g) => g.id === m.modeId);
+                            const modeIds = m.modeIds || (m.modeId ? [m.modeId] : []);
+                            const matchModes = modeIds.map((id) => gamemodes.find((g) => g.id === id)).filter(Boolean);
                             return (
                               <div key={m.id} style={{ background: "#1A1720", border: "1px solid #221F2B", borderRadius: 10, padding: 8, display: "flex", flexDirection: "column", gap: 4 }}>
                                 {[["A", m.playerAId], ["B", m.playerBId]].map(([slotKey, pid]) => {
@@ -1152,23 +1189,50 @@ export default function TierLadder() {
                                   );
                                 })}
                                 {editMode && m.playerAId && m.playerBId && (
-                                  <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 2 }}>
-                                    <select className="tl-select" style={{ fontSize: 10, flex: 1 }} value={m.modeId || ""} onChange={(e) => updateBracketMatch(t.id, ri, mi, "modeId", e.target.value)}>
-                                      <option value="">Chế độ</option>
-                                      {gamemodes.map((g) => <option key={g.id} value={g.id}>{g.icon} {g.name}</option>)}
-                                    </select>
+                                  <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 2 }}>
+                                    <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+                                      {gamemodes.map((g) => {
+                                        const active = modeIds.includes(g.id);
+                                        return (
+                                          <button
+                                            key={g.id}
+                                            type="button"
+                                            title={g.name}
+                                            onClick={() => updateBracketMatch(t.id, ri, mi, "toggleMode", g.id)}
+                                            style={{
+                                              width: 20,
+                                              height: 20,
+                                              display: "flex",
+                                              alignItems: "center",
+                                              justifyContent: "center",
+                                              borderRadius: 4,
+                                              border: active ? "1px solid #5FAFC4" : "1px solid #2A2733",
+                                              background: active ? "rgba(95,175,196,0.15)" : "#1E1E2A",
+                                              cursor: "pointer",
+                                              padding: 0,
+                                            }}
+                                          >
+                                            <ModeIcon g={g} size={11} />
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
                                     <Pin
                                       size={13}
                                       onClick={() => togglePin({ tournamentId: t.id, matchId: m.id, roundIdx: ri })}
                                       style={{
                                         cursor: "pointer",
-                                        flexShrink: 0,
+                                        alignSelf: "flex-end",
                                         color: data?.pinnedMatch?.tournamentId === t.id && data?.pinnedMatch?.matchId === m.id && data?.pinnedMatch?.roundIdx === ri ? "#FFD54A" : "#8D8998",
                                       }}
                                     />
                                   </div>
                                 )}
-                                {!editMode && mode && <div style={{ fontSize: 10, color: "#8D8998", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: 3 }}><ModeIcon g={mode} size={12} /> {mode.name}</div>}
+                                {!editMode && matchModes.length > 0 && (
+                                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, flexWrap: "wrap" }}>
+                                    {matchModes.map((mode) => <ModeIcon key={mode.id} g={mode} size={12} />)}
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
@@ -1185,11 +1249,12 @@ export default function TierLadder() {
                         const teamBIds = m.teamB || (m.playerBId ? [m.playerBId] : []);
                         const teamAPlayers = teamAIds.map((id) => players.find((p) => p.id === id)).filter(Boolean);
                         const teamBPlayers = teamBIds.map((id) => players.find((p) => p.id === id)).filter(Boolean);
-                        const mode = gamemodes.find((g) => g.id === m.modeId);
+                        const modeIds = m.modeIds || (m.modeId ? [m.modeId] : []);
+                        const matchModes = modeIds.map((id) => gamemodes.find((g) => g.id === id)).filter(Boolean);
                         const aWins = m.scoreA > m.scoreB;
                         const bWins = m.scoreB > m.scoreA;
                         return (
-                          <div key={m.id} className="tl-card" style={{ justifyContent: "center", alignItems: "flex-start" }}>
+                          <div key={m.id} className="tl-card" style={{ justifyContent: "center", alignItems: "flex-start", flexWrap: "wrap" }}>
                             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flex: 1, minWidth: 0 }}>
                               {teamAPlayers.map((p) => (
                                 <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -1208,9 +1273,11 @@ export default function TierLadder() {
                               ) : (
                                 <>{m.scoreA} : {m.scoreB}</>
                               )}
-                              <div style={{ marginTop: 4 }}>
-                                {mode && <span title={mode.name}><ModeIcon g={mode} size={14} /></span>}
-                              </div>
+                              {!editMode && matchModes.length > 0 && (
+                                <div style={{ marginTop: 4, display: "flex", justifyContent: "center", gap: 4, flexWrap: "wrap" }}>
+                                  {matchModes.map((mode) => <ModeIcon key={mode.id} g={mode} size={14} />)}
+                                </div>
+                              )}
                             </div>
                             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 4, flex: 1, minWidth: 0 }}>
                               {teamBPlayers.map((p) => (
@@ -1220,6 +1287,35 @@ export default function TierLadder() {
                                 </div>
                               ))}
                             </div>
+                            {editMode && (
+                              <div style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 3, flexWrap: "wrap", marginTop: 4 }}>
+                                {gamemodes.map((g) => {
+                                  const active = modeIds.includes(g.id);
+                                  return (
+                                    <button
+                                      key={g.id}
+                                      type="button"
+                                      title={g.name}
+                                      onClick={() => updateMatchModes(t.id, m.id, g.id)}
+                                      style={{
+                                        width: 22,
+                                        height: 22,
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        borderRadius: 5,
+                                        border: active ? "1px solid #5FAFC4" : "1px solid #2A2733",
+                                        background: active ? "rgba(95,175,196,0.15)" : "#1E1E2A",
+                                        cursor: "pointer",
+                                        padding: 0,
+                                      }}
+                                    >
+                                      <ModeIcon g={g} size={12} />
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
                             {editMode && (
                               <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 6, flexShrink: 0 }}>
                                 <Pin
@@ -1299,16 +1395,41 @@ export default function TierLadder() {
                               </div>
                             </div>
                           </div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            <div className="tl-mono" style={{ fontSize: 10, color: "#8D8998" }}>CHẾ ĐỘ THI ĐẤU ({matchDraft.modeIds.length})</div>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                              {gamemodes.map((g) => {
+                                const active = matchDraft.modeIds.includes(g.id);
+                                return (
+                                  <button
+                                    key={g.id}
+                                    type="button"
+                                    onClick={() => toggleDraftMode(g.id)}
+                                    style={{
+                                      fontSize: 11,
+                                      padding: "3px 9px",
+                                      borderRadius: 12,
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: 4,
+                                      border: active ? "1px solid #5FAFC4" : "1px solid #2A2733",
+                                      background: active ? "rgba(95,175,196,0.15)" : "#1E1E2A",
+                                      color: "#F1EFF7",
+                                      cursor: "pointer",
+                                    }}
+                                  >
+                                    <ModeIcon g={g} size={12} /> {g.name}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
                           <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                             <input type="number" className="tl-point-input" placeholder="0" value={matchDraft.scoreA} onChange={(e) => setMatchDraft((d) => ({ ...d, scoreA: e.target.value }))} />
                             <span className="tl-mono" style={{ fontSize: 12, color: "#8D8998" }}>vs</span>
                             <input type="number" className="tl-point-input" placeholder="0" value={matchDraft.scoreB} onChange={(e) => setMatchDraft((d) => ({ ...d, scoreB: e.target.value }))} />
-                            <select className="tl-select" value={matchDraft.modeId} onChange={(e) => setMatchDraft((d) => ({ ...d, modeId: e.target.value }))}>
-                              <option value="">Chế độ</option>
-                              {gamemodes.map((g) => <option key={g.id} value={g.id}>{g.icon} {g.name}</option>)}
-                            </select>
                             <button className="tl-btn" onClick={() => addMatch(t.id)}><Check size={14} /> Thêm trận</button>
-                            <button className="tl-btn" onClick={() => { setAddingMatchFor(null); setMatchDraft({ teamA: [], teamB: [], modeId: "", scoreA: 0, scoreB: 0 }); }}><X size={14} /></button>
+                            <button className="tl-btn" onClick={() => { setAddingMatchFor(null); setMatchDraft({ teamA: [], teamB: [], modeIds: [], scoreA: 0, scoreB: 0 }); }}><X size={14} /></button>
                           </div>
                         </div>
                       ) : (
