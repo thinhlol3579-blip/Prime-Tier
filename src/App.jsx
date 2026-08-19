@@ -788,7 +788,14 @@ export default function TierLadder() {
           </div>
         )}
 
-        <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 12 }}>
+        <div
+          style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 12 }}
+          onWheel={(e) => {
+            if (e.deltaY === 0) return;
+            e.currentTarget.scrollLeft += e.deltaY;
+            e.preventDefault();
+          }}
+        >
           <div
             className="tl-tab"
             onClick={() => setActiveTab("overall")}
