@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Flame, Plus, X, Trash2, Settings, Trophy, Pencil, Check, Sliders, Search, Ban, Download, Swords, Pin, ChevronUp, ChevronDown } from "lucide-react";
 import { db } from "./firebase";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
@@ -216,6 +216,20 @@ export default function TierLadder() {
     );
     return () => unsub();
   }, []);
+
+  const tabsBarRef = useRef(null);
+
+  useEffect(() => {
+    const el = tabsBarRef.current;
+    if (!el) return;
+    const handler = (e) => {
+      if (e.deltaY === 0) return;
+      el.scrollLeft += e.deltaY;
+      e.preventDefault();
+    };
+    el.addEventListener("wheel", handler, { passive: false });
+    return () => el.removeEventListener("wheel", handler);
+  }, [loading]);
 
   async function persist(next) {
     setData(next);
@@ -789,12 +803,8 @@ export default function TierLadder() {
         )}
 
         <div
+          ref={tabsBarRef}
           style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 12 }}
-          onWheel={(e) => {
-            if (e.deltaY === 0) return;
-            e.currentTarget.scrollLeft += e.deltaY;
-            e.preventDefault();
-          }}
         >
           <div
             className="tl-tab"
