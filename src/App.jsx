@@ -1031,11 +1031,26 @@ export default function TierLadder() {
                   ) : (
                     <div style={{ fontSize: 14, fontWeight: medal ? 700 : 500, color: medal ? medal.chip : "#F1EFF7", textShadow: medal ? `0 0 10px ${medal.glow}` : "none" }}>{p.name}</div>
                   )}
-                  <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }} onClick={(e) => editMode && e.stopPropagation()}>
                     {gamemodes.map((g) => {
                       const meta = tierMeta(p.ranks[g.id], tierPoints);
                       const isRetired = !!p.retired?.[g.id];
                       const c = GROUP_COLOR[meta.group];
+                      if (editMode) {
+                        return (
+                          <select
+                            key={g.id}
+                            className="tl-select"
+                            title={g.name}
+                            value={meta.code}
+                            onChange={(e) => setRank(p.id, g.id, e.target.value)}
+                            style={{ fontSize: 10, padding: "1px 4px", borderColor: c.edge, color: isRetired ? "#57546A" : c.text, opacity: isRetired ? 0.5 : 1 }}
+                          >
+                            <option value="UR">—</option>
+                            {TIER_CODES.map((code) => <option key={code} value={code}>{code}</option>)}
+                          </select>
+                        );
+                      }
                       return (
                         <span
                           key={g.id}
