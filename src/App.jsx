@@ -1038,17 +1038,24 @@ export default function TierLadder() {
                       const c = GROUP_COLOR[meta.group];
                       if (editMode) {
                         return (
-                          <select
-                            key={g.id}
-                            className="tl-select"
-                            title={g.name}
-                            value={meta.code}
-                            onChange={(e) => setRank(p.id, g.id, e.target.value)}
-                            style={{ fontSize: 10, padding: "1px 4px", borderColor: c.edge, color: isRetired ? "#57546A" : c.text, opacity: isRetired ? 0.5 : 1 }}
-                          >
-                            <option value="UR">—</option>
-                            {TIER_CODES.map((code) => <option key={code} value={code}>{code}</option>)}
-                          </select>
+                          <span key={g.id} style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
+                            <select
+                              className="tl-select"
+                              title={g.name}
+                              value={meta.code}
+                              onChange={(e) => setRank(p.id, g.id, e.target.value)}
+                              style={{ fontSize: 10, padding: "1px 4px", borderColor: c.edge, color: isRetired ? "#57546A" : c.text, opacity: isRetired ? 0.5 : 1 }}
+                            >
+                              <option value="UR">—</option>
+                              {TIER_CODES.map((code) => <option key={code} value={code}>{code}</option>)}
+                            </select>
+                            <Ban
+                              size={11}
+                              title={isRetired ? `Bỏ nghỉ hưu (${g.name})` : `Đánh dấu nghỉ hưu (${g.name})`}
+                              onClick={() => toggleRetired(p.id, g.id)}
+                              style={{ cursor: "pointer", color: isRetired ? "#E8432B" : "#57546A", flexShrink: 0 }}
+                            />
+                          </span>
                         );
                       }
                       return (
